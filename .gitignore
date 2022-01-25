@@ -1,0 +1,8 @@
+cmake-build-remarkable/
+cmake-build-simulator/
+fb.raw
+fb.pnm
+event0
+event1
+event2
+.idea
