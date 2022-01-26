@@ -95,14 +95,14 @@ void Sample::setSymRec( SymRec *sr ){
 
 
 void Sample::loadSCGInk(char *str) {
-  FILE *fd=fopen(str,"r");
+  FILE *fd=fmemopen(str,strlen(str),"r");
   if( !fd ) {
     fprintf(stderr, "Error loading SCGInk file '%s'\n", str);
     exit(1);
   }
 
   char line[1024];
-  
+
   fgets(line, 1024, fd);
   if( strcmp(line, "SCG_INK\n") ) {
     fprintf(stderr, "Error: input file format is not SCG_INK\n");

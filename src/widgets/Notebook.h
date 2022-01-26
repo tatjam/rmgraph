@@ -10,6 +10,11 @@ struct DrawnLine
 	int x0, y0, x1, y1;
 };
 
+struct DrawnStroke
+{
+	std::vector<DrawnLine> lines;
+};
+
 struct MathObject
 {
 	enum MathType
@@ -30,8 +35,11 @@ struct MathObject
 // The MathObjects are not neccesarily in the same page as their display
 struct Page
 {
-	std::vector<DrawnLine> dirty;
+	std::vector<DrawnStroke> drawn;
 	std::vector<MathObject> objects;
+
+	// Generates an scg ink file from a rectangular area (TODO: More complex areas)
+	std::string generate_scg_ink(Vec2i min, Vec2i max);
 };
 
 // Allows writing formulas and comments at the bottom of the screen with a graph at the top
@@ -40,6 +48,9 @@ struct Page
 class Notebook : public ui::Widget
 {
 private:
+
+	std::vector<DrawnLine> drawing;
+	bool in_draw;
 
 	void draw_graph();
 	void draw_bottom();
@@ -67,9 +78,6 @@ private:
 				   bool vertical, int color, int size, bool drag);
 	void draw_cross(int color, int size, bool drag);
 
-	void write_area_to_file(Vec2i start, Vec2i end, const std::string& path);
-	// Removes the target file after it's done
-	void image_to_equation(const std::string& path);
 
 public:
 

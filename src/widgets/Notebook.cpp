@@ -17,6 +17,7 @@ void Notebook::on_mouse_up(input::SynMotionEvent& ev)
 			top_dirty = true;
 		}
 		in_drag = false;
+		in_draw = false;
 	}
 
 }
@@ -63,6 +64,11 @@ void Notebook::on_pen_move()
 		}
 		else
 		{
+			if(!in_draw)
+			{
+				bottom_pages[bottom_page].drawn.push_back(DrawnStroke());
+				in_draw = true;
+			}
 			// Draw a line
 			DrawnLine line;
 			line.x0 = last_pen.x;
@@ -70,7 +76,7 @@ void Notebook::on_pen_move()
 			line.x1 = cur_pen.x;
 			line.y1 = cur_pen.y;
 
-			bottom_pages[bottom_page].dirty.push_back(line);
+			drawing.push_back(line);
 			bottom_dirty = true;
 			dirty = 1;
 		}
@@ -104,16 +110,23 @@ Notebook::Notebook(int x, int y, int w, int h) : Widget(x, y, w, h), vfb(w, h)
 
 	top_dirty = true;
 	drag_finish = -1;
+	in_draw = false;
 }
 
 void Notebook::draw_bottom()
 {
-	for(DrawnLine& l : bottom_pages[bottom_page].dirty)
+	for(DrawnLine& l : drawing)
 	{
 		fb->draw_line(l.x0, l.y0, l.x1, l.y1, 1, BLACK);
 	}
 
-	bottom_pages[bottom_page].dirty.clear();
+	// Insert the drawn lines to the last stroke (a new one will be created!)
+	auto& drawn = bottom_pages[bottom_page].drawn;
+	auto& lines = drawn[drawn.size() - 1].lines;
+	lines.insert(lines.end(), drawing.begin(), drawing.end());
+
+	drawing.clear();
+
 }
 
 
@@ -207,3 +220,34 @@ void Notebook::draw_cross(int color, int size, bool drag)
 	}
 }
 
+std::string Page::generate_scg_ink(Vec2i min, Vec2i max)
+{
+	// Implemented following https://www.scg.uwaterloo.ca/mathbrush/publications/corpus.pdf
+	std::string out;
+	out += "SCG_INK\n";
+
+	// TODO: Include only strokes in rectangle
+
+	out += std::to_string(drawn.size());
+	out += "\n";
+	int in_stroke = 1;
+	for(DrawnStroke& stroke : drawn)
+	{
+		out += std::to_string(stroke.lines.size() * 2);
+		out += "\n";
+		// Write all the lines
+		for(DrawnLine& l : stroke.lines)
+		{
+			out += std::to_string(l.x0);
+			out += ' ';
+			out += std::to_string(l.y0);
+			out += '\n';
+			out += std::to_string(l.x1);
+			out += ' ';
+			out += std::to_string(l.y1);
+			out += '\n';
+		}
+	}
+
+	return out;
+}
