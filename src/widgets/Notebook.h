@@ -67,6 +67,10 @@ private:
 				   bool vertical, int color, int size, bool drag);
 	void draw_cross(int color, int size, bool drag);
 
+	void write_area_to_file(Vec2i start, Vec2i end, const std::string& path);
+	// Removes the target file after it's done
+	void image_to_equation(const std::string& path);
+
 public:
 
 	bool in_drag = false;
