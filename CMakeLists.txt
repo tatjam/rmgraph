@@ -12,10 +12,12 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 
 find_package(Threads REQUIRED)
 
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-add_executable(rmdev ${SOURCES})
+
+add_executable(rmdev src/Main.cpp)
 include_directories(rmdev PUBLIC src)
 target_link_libraries(rmdev Threads::Threads)
+target_compile_definitions(rmdev PUBLIC DEV=true)
+
 
 project(rmdev-native)
 
@@ -26,11 +28,11 @@ set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 
-
 find_package(Threads REQUIRED)
 
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-add_executable(rmdev-native ${SOURCES})
+add_executable(rmdev-native src/Main.cpp)
 include_directories(rmdev-native PUBLIC src)
 target_link_libraries(rmdev-native Threads::Threads)
+target_compile_definitions(rmdev-native PUBLIC REMARKABLE=1)
+target_compile_options(rmdev-native PUBLIC -O3)
 

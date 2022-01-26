@@ -21083,7 +21083,8 @@ namespace framebuffer {
     _FB = make_shared<framebuffer::RemarkableFB>();
     #elif KOBO
     _FB = make_shared<framebuffer::KoboFB>();
-    #elif DEV
+	#elif DEV
+	printf("Making FileFB\n");
     _FB = make_shared<framebuffer::FileFB>("fb.raw", DISPLAYWIDTH, DISPLAYHEIGHT);
     #else
     _FB = make_shared<framebuffer::HardwareFB>();
