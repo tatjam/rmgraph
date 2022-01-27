@@ -32,22 +32,25 @@ int main()
 	while(!exit)
 	{
 		ui::MainLoop::main();
-		std::string sg_ink = notebook->bottom_pages[0].generate_scg_ink({0, 0}, {0, 0});
 		if(notebook->last_pen.x >= 1000)
 		{
+			std::string sg_ink = notebook->bottom_pages[0].generate_scg_ink({0, 0}, {0, 0});
 			// Generate a math expression
 			printf("EXPR!\n");
 			char* mod_array = (char*)malloc(sizeof(char) * sg_ink.size());
 			strcpy(mod_array, sg_ink.c_str());
+#ifdef DEV
 			char* conf = "Config/CONFIG";
+#else
+			char* conf = "/home/rmmath/Config/CONFIG";
+#endif
 
 			Sample smp = Sample(mod_array);
 			meParser parser = meParser(conf);
-			smp.print();
-			printf("\n");
 			parser.parse_me(&smp);
 
 			exit = true;
+			free(mod_array);
 		}
 		ui::MainLoop::redraw();
 		ui::MainLoop::read_input();

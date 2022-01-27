@@ -39,5 +39,5 @@ add_executable(rmdev-native src/Main.cpp ${SESHAT_SOURCES} ${RNNLIB_SOURCES})
 include_directories(rmdev-native PUBLIC src)
 target_link_libraries(rmdev-native Threads::Threads)
 target_compile_definitions(rmdev-native PUBLIC REMARKABLE=1)
-target_compile_options(rmdev-native PUBLIC -O3 -fpermissive)
+target_compile_options(rmdev-native PUBLIC -Ofast -fpermissive)
 

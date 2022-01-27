@@ -233,10 +233,22 @@ std::string Page::generate_scg_ink(Vec2i min, Vec2i max)
 	int in_stroke = 1;
 	for(DrawnStroke& stroke : drawn)
 	{
-		out += std::to_string(stroke.lines.size() * 2);
+		// We do a quick simplification
+		std::vector<DrawnLine> simple_lines;
+		for(size_t i = 0; i < stroke.lines.size(); i++)
+		{
+			if(i % 5 == 0)
+			{
+				simple_lines.push_back(stroke.lines[i]);
+			}
+		}
+
+		printf("Line num: %i -> %i\n", stroke.lines.size(), simple_lines.size());
+
+		out += std::to_string(simple_lines.size() * 2);
 		out += "\n";
 		// Write all the lines
-		for(DrawnLine& l : stroke.lines)
+		for(DrawnLine& l : simple_lines)
 		{
 			out += std::to_string(l.x0);
 			out += ' ';
