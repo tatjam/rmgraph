@@ -31,11 +31,9 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 
 find_package(Threads REQUIRED)
 
-file(GLOB_RECURSE SESHAT_SOURCES "src/seshat/*.cc")
-file(GLOB_RECURSE RNNLIB_SOURCES "src/seshat/rnnlib4seshat/*.cpp")
-add_executable(rmdev-native src/Main.cpp ${SESHAT_SOURCES} ${RNNLIB_SOURCES})
+add_executable(rmdev-native src/Main.cpp)
 include_directories(rmdev-native PUBLIC src)
 target_link_libraries(rmdev-native Threads::Threads)
 target_compile_definitions(rmdev-native PUBLIC REMARKABLE=1)
-target_compile_options(rmdev-native PUBLIC -Ofast -fpermissive)
+target_compile_options(rmdev-native PUBLIC -Ofast)
 

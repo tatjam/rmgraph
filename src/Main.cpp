@@ -7,6 +7,7 @@
 
 #include "widgets/Notebook.cpp"
 #include "math/MathExpression.cpp"
+#include "widgets/MathKeyboard.cpp"
 
 int main()
 {
@@ -24,9 +25,14 @@ int main()
 	auto notebook = new Notebook(0, 0, 1404, 1872);
 	scene->add(notebook);
 
+	auto kb = new MathKeyboard(0, 0, 1404, 1872);
+	scene->add(kb);
+
 	ui::MainLoop::refresh();
 	ui::MainLoop::redraw();
 	bool exit = false;
+	kb->dirty = 1;
+
 	while(!exit)
 	{
 		ui::MainLoop::main();
