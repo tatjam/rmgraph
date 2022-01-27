@@ -15,20 +15,19 @@ struct DrawnStroke
 	std::vector<DrawnLine> lines;
 };
 
-struct MathObject
+// Basically a child of
+struct NotebookObject
 {
-	enum MathType
+	enum Type
 	{
-		EQUALITY, // An equality gives LHS the value in RHS
-		EQUATION, // An equation relates LHS (x or y) to the value in RHS, computed for every value of (x or y)
-		PARAMETRIC // A parametric denotes a pair of coordinates on a timer variable "t". May be a point too
+		FUNCTION, // expr(x, y) = expr(x, y), allows plotting.
+		PARAMETRIC, // f(t) = (f_x(t), f_y(t)), allows plotting
 	};
-	// For parametric, each of the coordinates
+
+	Type type;
+
 	std::string lhs;
 	std::string rhs;
-
-	bool dirty;
-	std::vector<int> in_pages;
 };
 
 // A Page contains user drawn stuff and equations (math objects)
@@ -36,10 +35,8 @@ struct MathObject
 struct Page
 {
 	std::vector<DrawnStroke> drawn;
-	std::vector<MathObject> objects;
+	std::vector<NotebookObject> objects;
 
-	// Generates an scg ink file from a rectangular area (TODO: More complex areas)
-	std::string generate_scg_ink(Vec2i min, Vec2i max);
 };
 
 // Allows writing formulas and comments at the bottom of the screen with a graph at the top

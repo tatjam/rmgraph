@@ -13,13 +13,11 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 
 
-file(GLOB_RECURSE SESHAT_SOURCES "src/seshat/*.cc")
-file(GLOB_RECURSE RNNLIB_SOURCES "src/seshat/rnnlib4seshat/*.cpp")
-add_executable(rmdev src/Main.cpp ${SESHAT_SOURCES} ${RNNLIB_SOURCES})
-include_directories(rmdev PUBLIC src)
+add_executable(rmdev src/Main.cpp)
+include_directories(rmdev PUBLIC src src/symbolic)
 target_link_libraries(rmdev Threads::Threads)
 target_compile_definitions(rmdev PUBLIC DEV=true)
-target_compile_options(rmdev PUBLIC -fpermissive -std=c++11)
+target_compile_options(rmdev PUBLIC -fno-elide-constructors)
 
 
 project(rmdev-native)

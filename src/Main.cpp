@@ -6,9 +6,7 @@
 #include "rmkit.h"
 
 #include "widgets/Notebook.cpp"
-#include <seshat/grammar.h>
-#include <seshat/sample.h>
-#include <seshat/meparser.h>
+#include "math/MathExpression.cpp"
 
 int main()
 {
@@ -34,23 +32,8 @@ int main()
 		ui::MainLoop::main();
 		if(notebook->last_pen.x >= 1000)
 		{
-			std::string sg_ink = notebook->bottom_pages[0].generate_scg_ink({0, 0}, {0, 0});
-			// Generate a math expression
 			printf("EXPR!\n");
-			char* mod_array = (char*)malloc(sizeof(char) * sg_ink.size());
-			strcpy(mod_array, sg_ink.c_str());
-#ifdef DEV
-			char* conf = "Config/CONFIG";
-#else
-			char* conf = "/home/rmmath/Config/CONFIG";
-#endif
-
-			Sample smp = Sample(mod_array);
-			meParser parser = meParser(conf);
-			parser.parse_me(&smp);
-
 			exit = true;
-			free(mod_array);
 		}
 		ui::MainLoop::redraw();
 		ui::MainLoop::read_input();
