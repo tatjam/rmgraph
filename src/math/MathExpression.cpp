@@ -131,8 +131,16 @@ void MathExpression::draw_simple(int sx, int sy, framebuffer::FB* fb)
 			text = tok.value;
 			if(tok.value == "*")
 			{
-				text = "";
-				off = -13;
+				text = "\xC2\xB7";
+				// We don't display the * if to its right is a variable or function or parenthesis and to its left a number
+				// (This is safe to do thanks to placeholders)
+				if(tokens[ti - 1].type == MathToken::NUMBER &&
+					(tokens[ti + 1].type == MathToken::VARIABLE || tokens[ti + 1].type == MathToken::LPAREN ||
+					tokens[ti + 1].type == MathToken::FUNCTION))
+				{
+					text = "";
+					off = -10;
+				}
 			}
 		}
 		else if(tok.type == MathToken::LPAREN)

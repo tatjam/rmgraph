@@ -116,14 +116,14 @@ MathKeyboard::MathKeyboard(int x, int y, int w, int h) : Widget(x, y, w, h)
 	basic_buttons.emplace_back(156 * 3, start +  156 * 0, 156, 156, "(");
 	basic_buttons.emplace_back(156 * 4, start +  156 * 0, 156, 156, ")");
 	basic_buttons.emplace_back(156 * 5, start +  156 * 0, 156, 156, "a_");
-	basic_buttons.emplace_back(156 * 6, start +  156 * 0, 156, 156, "\xCF\x80");
+	basic_buttons.emplace_back(156 * 6, start +  156 * 0, 156, 156, "\xCF\x80"); // pi
 	basic_buttons.emplace_back(156 * 7, start +  156 * 0, 156, 156, "e");
 	basic_buttons.emplace_back(156 * 8, start +  156 * 0, 156, 156, "x");
 
 	basic_buttons.emplace_back(156 * 0, start +  156 * 1, 156, 156, "*");
 	basic_buttons.emplace_back(156 * 1, start +  156 * 1, 156, 156, "/");
-	basic_buttons.emplace_back(156 * 2, start +  156 * 1, 156, 156, "a\xC2\xB2");
-	basic_buttons.emplace_back(156 * 3, start +  156 * 1, 156, 156, "\xE2\x88\x9A");
+	basic_buttons.emplace_back(156 * 2, start +  156 * 1, 156, 156, "a\xC2\xB2"); //a^2
+	basic_buttons.emplace_back(156 * 3, start +  156 * 1, 156, 156, "\xE2\x88\x9A"); // sqrt
 	basic_buttons.emplace_back(156 * 4, start +  156 * 1, 156, 156, "log");
 	basic_buttons.emplace_back(156 * 5, start +  156 * 1, 156, 156, "1");
 	basic_buttons.emplace_back(156 * 6, start +  156 * 1, 156, 156, "2");
@@ -143,8 +143,8 @@ MathKeyboard::MathKeyboard(int x, int y, int w, int h) : Widget(x, y, w, h)
 	basic_buttons.emplace_back(156 * 0, start +  156 * 3, 156, 156, "sinh");
 	basic_buttons.emplace_back(156 * 1, start +  156 * 3, 156, 156, "cosh");
 	basic_buttons.emplace_back(156 * 2, start +  156 * 3, 156, 156, "tanh");
-	basic_buttons.emplace_back(156 * 3, start +  156 * 3, 156, 156, "\xE2\x89\xA5");
-	basic_buttons.emplace_back(156 * 4, start +  156 * 3, 156, 156, "\xE2\x89\xA4");
+	basic_buttons.emplace_back(156 * 3, start +  156 * 3, 156, 156, "\xE2\x89\xA5"); // >=
+	basic_buttons.emplace_back(156 * 4, start +  156 * 3, 156, 156, "\xE2\x89\xA4"); // <=
 	basic_buttons.emplace_back(156 * 5, start +  156 * 3, 156, 156, "7");
 	basic_buttons.emplace_back(156 * 6, start +  156 * 3, 156, 156, "8");
 	basic_buttons.emplace_back(156 * 7, start +  156 * 3, 156, 156, "9");
@@ -207,6 +207,27 @@ static void insert_or_push(std::vector<MathToken>& target, int pos, MathToken to
 	}
 }
 
+static void insert_or_push(std::vector<MathToken>& target, int pos, std::vector<MathToken>& tok)
+{
+	if(pos + 1 >= target.size())
+	{
+		for(int i = 0; i < tok.size(); i++)
+		{
+			target.push_back(tok[i]);
+		}
+	}
+	else
+	{
+		target.insert(target.begin() + pos + 1, tok.begin(), tok.end());
+	}
+}
+
+static void replace_dummy(std::vector<MathToken>& target, int pos, std::vector<MathToken>& tok)
+{
+	target[pos] = tok[0];
+	target.insert(target.begin() + pos + 1, tok.begin() + 1, tok.end());
+}
+
 // working_pos is to the left of where the next written character will be inserted
 // unless it's over a dummy in which case the dummy is replaced by the inserted character
 void MathKeyboard::on_click(Button* b)
@@ -231,7 +252,12 @@ void MathKeyboard::on_click(Button* b)
 	comma.type = MathToken::COMMA;
 
 
-	MathToken tok;
+	// All these tokens are inserted as a whole group
+	std::vector<MathToken> tokl;
+	tokl.push_back(MathToken());
+	// For convenience of code
+	auto& tok = tokl[0];
+
 	bool build_number = false;
 	int insert_placeholder = 0;
 	bool needs_prev_placeholder = false;
@@ -271,6 +297,16 @@ void MathKeyboard::on_click(Button* b)
 		insert_placeholder = 2;
 		insert_parens_around_placeholder = true;
 	}
+	else if(b->as_char == "a\xC2\xB2")
+	{
+		// Insert ^2 block
+		tok.type = MathToken::OPERATOR;
+		tok.value = "^";
+		needs_prev_placeholder = true;
+		tokl.push_back(MathToken());
+		tokl[1].type = MathToken::NUMBER;
+		tokl[1].value = "2";
+	}
 	else if(is_buildable_number(b->as_char))
 	{
 		tok.type = MathToken::NUMBER;
@@ -284,6 +320,7 @@ void MathKeyboard::on_click(Button* b)
 	}
 
 	auto& tokens = working->tokens;
+
 	if(build_number)
 	{
 		// If there's another buildable number previously, add to it
@@ -328,35 +365,68 @@ void MathKeyboard::on_click(Button* b)
 		if (!tokens.empty() && tokens[working_pos].type == MathToken::DUMMY)
 		{
 			// We replace the dummy which is already properly parenthesized, etc...
-			tokens[working_pos] = tok;
+			replace_dummy(tokens, working_pos, tokl);
 		}
 		else
 		{
 			// We are adding next to something, insert to the right of working_pos
-			insert_or_push(tokens, working_pos, tok);
-			working_pos++;
+			insert_or_push(tokens, working_pos, tokl);
+			working_pos+=tokl.size();
 		}
 
+		int first_placeholder = -1;
 		if (needs_prev_placeholder)
 		{
-			// A prev placeholder is added if the operator is not preceded by anything. This can only happen
-			// if to its left is an open! (Remember, we always insert parenthesis around fractions)
-			if (working_pos == 0)
+			// A prev placeholder is added if the operator is not preceded by anything, or its preceded
+			// by an opening parenthesis or operator
+			if (working_pos == tokl.size() - 1)
 			{
+				// We add to the start! Careful
 				tokens.insert(tokens.begin(), placeholder);
+				first_placeholder = 0;
 				working_pos++;
 			}
-			else if (tokens[working_pos - 1].type == MathToken::LPAREN)
+			else if (tokens[working_pos - 1].type == MathToken::LPAREN
+				|| tokens[working_pos - 1].type == MathToken::OPERATOR)
 			{
 
 				insert_or_push(tokens, working_pos - 1, placeholder);
+				first_placeholder = working_pos;
 				working_pos++;
 			}
 		}
 
 		if (insert_parens_around_prev)
 		{
-			// TODO
+			// This is actually quite complex, we parenthesize until we find:
+			// a (+ or -) or we reach the end of the document
+			// We respect parenthesis so if we find a + or - inside parenthesis it doesn't matter
+			int ptr = working_pos;
+			int paren_depth = 0;
+			int finish = -1;
+			while(ptr != 0)
+			{
+				if(tokens[ptr].type == MathToken::RPAREN)
+				{
+					paren_depth++;
+				}
+				else if(tokens[ptr].type == MathToken::LPAREN)
+				{
+					paren_depth--;
+				}
+				else if(tokens[ptr].type == MathToken::OPERATOR &&
+					(tokens[ptr].value == "+" || tokens[ptr].value == "-") && paren_depth == 0)
+				{
+					finish = ptr;
+				}
+
+				ptr--;
+			}
+
+			insert_or_push(tokens, finish, lparen);
+			working_pos++;
+			insert_or_push(tokens, working_pos - 1, rparen);
+			working_pos++;
 		}
 
 		if (insert_parens_around_placeholder)
@@ -364,13 +434,12 @@ void MathKeyboard::on_click(Button* b)
 			insert_or_push(tokens, working_pos, lparen);
 			working_pos++;
 		}
-		int first_placeholder;
 		for (int i = 0; i < insert_placeholder; i++)
 		{
 			// Insert place holders following the element with commas
 			insert_or_push(tokens, working_pos, placeholder);
 			working_pos++;
-			if(i == 0)
+			if(i == 0 && first_placeholder == -1)
 			{
 				first_placeholder = working_pos;
 			}
@@ -387,7 +456,7 @@ void MathKeyboard::on_click(Button* b)
 		}
 
 		// Go back to the first dummy
-		if(insert_placeholder != 0)
+		if(first_placeholder != -1)
 		{
 			working_pos = first_placeholder;
 		}
