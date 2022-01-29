@@ -136,9 +136,9 @@ void Notebook::draw_graph()
 	if(drag_finish == 0)
 	{
 		// Flash black and white
-		fb->draw_rect(0, 0, 1404, separator, BLACK, true);
+		fb->draw_rect(0, 80, 1404, separator, BLACK, true);
 		this_thread::sleep_for(1.5s);
-		fb->draw_rect(0, 0, 1404, separator, WHITE, true);
+		fb->draw_rect(0, 80, 1404, separator, WHITE, true);
 		drag_finish = -1;
 	}
 
@@ -209,7 +209,7 @@ void Notebook::draw_cross(int color, int size, bool drag)
 	Vec2i center = transform_point(Vec2f(0.0f, 0.0f));
 	if(in_bounds_x(center))
 	{
-		draw_axis(0, separator, center.x, 0.0f, 0.0f, 1.0f,
+		draw_axis(80, separator, center.x, 0.0f, 0.0f, 1.0f,
 				  true, color, size, drag);
 	}
 

@@ -64,7 +64,7 @@ private:
 	}
 	bool in_bounds_y(const Vec2i p) const
 	{
-		return p.y >= 0 && p.y < separator;
+		return p.y >= 80 && p.y < separator;
 	}
 	bool in_bounds(const Vec2i p) const
 	{

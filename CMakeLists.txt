@@ -12,9 +12,8 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 
 find_package(Threads REQUIRED)
 
-
 add_executable(rmdev src/Main.cpp)
-include_directories(rmdev PUBLIC src src/symbolic)
+include_directories(rmdev PUBLIC src src/clatexmath)
 target_link_libraries(rmdev Threads::Threads)
 target_compile_definitions(rmdev PUBLIC DEV=true)
 target_compile_options(rmdev PUBLIC -fno-elide-constructors)
