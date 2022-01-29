@@ -93,6 +93,7 @@ void MathKeyboard::render()
 	{
 		working->draw(40, 900, fb);
 		working->draw_cursor(working_pos, fb);
+		draw_expression = false;
 	}
 }
 
