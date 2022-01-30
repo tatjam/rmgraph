@@ -323,6 +323,9 @@ void MathKeyboard::on_click(Button* b)
 
 	auto& tokens = working->tokens;
 
+	dirty = 1;
+	draw_expression = true;
+
 	if(build_number)
 	{
 		// If there's another buildable number previously, add to it
@@ -388,8 +391,8 @@ void MathKeyboard::on_click(Button* b)
 				first_placeholder = 0;
 				working_pos++;
 			}
-			else if (tokens[working_pos - 1].type == MathToken::LPAREN
-				|| tokens[working_pos - 1].type == MathToken::OPERATOR)
+			else if (tokens[working_pos - tokl.size()].type == MathToken::LPAREN
+				|| tokens[working_pos - tokl.size()].type == MathToken::OPERATOR)
 			{
 
 				insert_or_push(tokens, working_pos - 1, placeholder);
@@ -464,9 +467,6 @@ void MathKeyboard::on_click(Button* b)
 		}
 
 
-
-		dirty = true;
-		draw_expression = true;
 	}
 
 	printf("after: working_pos = %i\n", working_pos);
