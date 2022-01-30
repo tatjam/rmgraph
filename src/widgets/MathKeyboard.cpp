@@ -57,6 +57,7 @@ void MathKeyboard::render()
 		{
 			b.draw(fb);
 		}
+		draw_topbar = false;
 	}
 
 	if(draw_clicked)
@@ -178,7 +179,7 @@ void MathKeyboard::clear_clicked(Button *b)
 {
 	std::remove(clicked.begin(), clicked.end(), b);
 	to_clear.push_back(b);
-	ui::set_interval([this, b](){this->redraw_cleared(b);}, 500);
+	ui::set_timeout([this, b](){this->redraw_cleared(b);}, 500);
 	dirty = true;
 	draw_to_clear = true;
 }

@@ -320,6 +320,11 @@ void MathExpression::draw_cursor(size_t working_pos, framebuffer::FB *fb)
 
 }
 
+void MathExpression::draw_advanced(int sx, int sy, framebuffer::FB *fb)
+{
+
+}
+
 int MathToken::get_precedence()
 {
 	if(type != OPERATOR)

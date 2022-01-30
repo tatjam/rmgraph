@@ -60,6 +60,7 @@ public:
 
 	void draw(int sx, int sy, framebuffer::FB* fb);
 	void draw_simple(int sx, int sy, framebuffer::FB* fb);
+	void draw_advanced(int sx, int sy, framebuffer::FB* fb);
 	void draw_cursor(size_t working_pos, framebuffer::FB* fb);
 };
 
