@@ -96,8 +96,65 @@ void MathExpression::draw(int sx, int sy, framebuffer::FB* fb)
 	{
 		// Simplistic rendering
 		draw_simple(sx, sy, fb);
+		draw_advanced(sx, sy + 400, fb);
 		return;
 	}
+	else
+	{
+		draw_advanced(sx, sy, fb);
+		return;
+	}
+
+}
+
+void MathExpression::get_render(size_t pos, int& width, int& off, int& offx, std::string& text)
+{
+	int base_width = 34;
+	width = 0;
+	off = 0;
+	offx = 0;
+	text = "";
+
+	auto tok = tokens[pos];
+	if(tok.type == MathToken::VARIABLE || tok.type == MathToken::OPERATOR || tok.type == MathToken::FUNCTION
+	   || tok.type == MathToken::NUMBER)
+	{
+		text = tok.value;
+		if(tok.value == "*")
+		{
+			text = "\xC2\xB7";
+			// We don't display the * if to its right is a variable or function or parenthesis and to its left a number
+			// (This is safe to do thanks to placeholders)
+			if(tokens[pos - 1].type == MathToken::NUMBER &&
+			   (tokens[pos + 1].type == MathToken::VARIABLE || tokens[pos + 1].type == MathToken::LPAREN ||
+				tokens[pos + 1].type == MathToken::FUNCTION))
+			{
+				text = "";
+				off = -10;
+			}
+		}
+	}
+	else if(tok.type == MathToken::LPAREN)
+	{
+		text = "(";
+		off = -15;
+	}
+	else if(tok.type == MathToken::RPAREN)
+	{
+		text = ")";
+		offx = -10;
+	}
+	else if(tok.type == MathToken::COMMA)
+	{
+		text = ",";
+		off = -15;
+	}
+	else if(tok.type == MathToken::DUMMY)
+	{
+		text = "[]";
+	}
+
+	width = count_utf8(text) * base_width;
 
 }
 
@@ -121,60 +178,149 @@ void MathExpression::draw_simple(int sx, int sy, framebuffer::FB* fb)
 			}
 		}
 		std::string text = "";
-		// TODO: Proper width detection for characters using stb!
-		int width = 34;
+		int width = 0;
 		int off = 0;
 		int offx = 0;
-		if(tok.type == MathToken::VARIABLE || tok.type == MathToken::OPERATOR || tok.type == MathToken::FUNCTION
-		|| tok.type == MathToken::NUMBER)
-		{
-			text = tok.value;
-			if(tok.value == "*")
-			{
-				text = "\xC2\xB7";
-				// We don't display the * if to its right is a variable or function or parenthesis and to its left a number
-				// (This is safe to do thanks to placeholders)
-				if(tokens[ti - 1].type == MathToken::NUMBER &&
-					(tokens[ti + 1].type == MathToken::VARIABLE || tokens[ti + 1].type == MathToken::LPAREN ||
-					tokens[ti + 1].type == MathToken::FUNCTION))
-				{
-					text = "";
-					off = -10;
-				}
-			}
-		}
-		else if(tok.type == MathToken::LPAREN)
-		{
-			text = "(";
-			off = -15;
-		}
-		else if(tok.type == MathToken::RPAREN)
-		{
-			text = ")";
-			offx = -10;
-		}
-		else if(tok.type == MathToken::COMMA)
-		{
-			text = ",";
-			off = -15;
-		}
-		else if(tok.type == MathToken::DUMMY)
-		{
-			text = "[]";
-		}
+
+		get_render(ti, width, off, offx, text);
 
 		fb->draw_text(x + offx, y, text, 64);
 		tok.render_x = x + offx;
 		tok.render_y = y;
-		int twidth = count_utf8(text) * width + off;
+		int twidth = width + off;
 		tok.render_w = twidth;
 		tok.render_h = 64;
 		tok.render_offset = off;
-		x += count_utf8(text) * width + off + offx;
+		x += twidth + offx;
 	}
 
 	last_maxx = x;
 }
+
+std::vector<size_t> MathExpression::find_minimum_depth_operators(std::string op_value, int lpar, int rpar)
+{
+	// We find the divisions higher up in the hierarchy
+	std::vector<size_t> lowest_found;
+
+	int pdepth = 0;
+	int min_pdepth = INT_MAX;
+	for(size_t i = lpar; i < rpar; i++)
+	{
+		if(tokens[i].type == MathToken::LPAREN)
+		{
+			pdepth++;
+		}
+		else if(tokens[i].type == MathToken::RPAREN)
+		{
+			pdepth--;
+		}
+		else if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == op_value)
+		{
+			if(pdepth < min_pdepth)
+			{
+				lowest_found.clear();
+				min_pdepth = pdepth;
+			}
+
+			// Now we can push it
+			if(pdepth == min_pdepth)
+			{
+				lowest_found.push_back(i);
+			}
+		}
+	}
+
+	return lowest_found;
+
+}
+
+void MathExpression::dimension_div(size_t pos)
+{
+	int nw, dw, nh, dh;
+	find_div_num_denum_sizes(pos, true, nw, dw, nh, dh);
+	tokens[pos].render_w = max(nw, dw) + 10;
+	tokens[pos].render_h = nh + dh + 10;
+}
+
+std::pair<int, int> MathExpression::find_left_right_pair(size_t pos)
+{
+	int num_open_par, den_close_par;
+
+	int pardepth = 0;
+	// Find numerator lpar
+	int i = pos - 1;
+	do
+	{
+		if(tokens[i].type == MathToken::LPAREN)
+		{
+			pardepth--;
+		}
+		else if(tokens[i].type == MathToken::RPAREN)
+		{
+			pardepth++;
+		}
+		i--;
+	} while(pardepth != 0);
+
+	num_open_par = i + 1;
+
+	// Find denominator rpar
+	i = pos + 1;
+	do
+	{
+		if(tokens[i].type == MathToken::RPAREN)
+		{
+			pardepth--;
+		}
+		else if(tokens[i].type == MathToken::LPAREN)
+		{
+			pardepth++;
+		}
+		i++;
+	} while(pardepth != 0);
+
+	den_close_par = i - 1;
+
+	return std::make_pair(num_open_par, den_close_par);
+}
+
+
+void MathExpression::draw_advanced(int sx, int sy, framebuffer::FB *fb)
+{
+	// TODO: Smart cleaning
+	fb->draw_rect(sx, sy - 150, 1404 - sx, 500, WHITE, true);
+
+	// Start at the top
+	auto lowest_divs = find_minimum_depth_operators("/", 0, tokens.size());
+
+	for(size_t div : lowest_divs)
+	{
+		dimension_div(div);
+	}
+
+	draw_advanced_expr(sx, sy, 0, tokens.size(), fb, false);
+
+}
+
+void MathExpression::draw_div(int sx, int sy, size_t pos, framebuffer::FB* fb)
+{
+	// first, we draw the line
+	int div_width = tokens[pos].render_w;
+
+	fb->draw_line(sx, sy + 32, sx + div_width - 6, sy + 32, 3, BLACK);
+	// Now we recursively draw num and denum, centered
+	int nw, dw, nh, dh;
+	find_div_num_denum_sizes(pos, false, nw, dw, nh, dh);
+	auto[left, right] = find_left_right_pair(pos);
+	int top_free = div_width - nw;
+	int bottom_free = div_width - dw;
+	// Stuff grows upwards, so the numerator is never a problem
+	draw_advanced_expr(sx + top_free / 2, sy - 32, left, pos, fb, true);
+	// The denominator we need to consider height
+	draw_advanced_expr(sx + bottom_free / 2, sy + dh, pos + 1, right + 1, fb, true);
+
+}
+
 
 std::optional<std::queue<MathToken>> MathExpression::get_rpn()
 {
@@ -320,10 +466,156 @@ void MathExpression::draw_cursor(size_t working_pos, framebuffer::FB *fb)
 
 }
 
-void MathExpression::draw_advanced(int sx, int sy, framebuffer::FB *fb)
+void MathExpression::find_div_num_denum_sizes(size_t pos, bool dimension_child, int& nw, int& dw, int& nh, int& dh)
 {
+	// We must find all other divs in the parenthesis and dimension them
+
+	auto[open_par_num, close_par_den] = find_left_right_pair(pos);
+	std::vector<size_t> num_divs = find_minimum_depth_operators("/", open_par_num, pos - 1);
+	std::vector<size_t> den_divs = find_minimum_depth_operators("/", pos + 1, close_par_den);
+
+	std::vector<std::pair<int, int>> num_divs_par;
+	std::vector<std::pair<int, int>> den_divs_par;
+	// Dimension the sub divs and obtain their parenthesis
+	for(size_t num_div : num_divs)
+	{
+		auto par = find_left_right_pair(num_div);
+		num_divs_par.push_back(par);
+		if(dimension_child)
+		{
+			dimension_div(num_div);
+		}
+	}
+	for(size_t den_div : den_divs)
+	{
+		auto par = find_left_right_pair(den_div);
+		den_divs_par.push_back(par);
+		if(dimension_child)
+		{
+			dimension_div(den_div);
+		}
+	}
+
+	// Now we can dimension ourselves, count symbols in parenthesis skipping them
+	int num_size = 0;
+	int den_size = 0;
+
+	// Heights are very easy
+	int num_height = 0;
+	int den_height = 0;
+
+	auto dimension = [this](int& target_size, int& target_height, int start, int end,
+							std::vector<std::pair<int, int>> pars, std::vector<size_t> divs)
+	{
+		for(int i = start; i < end; i++)
+		{
+			bool inside_pars = false;
+			// Make sure we are outside numerator divisions
+			for(std::pair<int, int> num_par : pars)
+			{
+				if(num_par.first <= i && num_par.second >= i)
+				{
+					inside_pars = true;
+					break;
+				}
+			}
+
+			if(inside_pars)
+			{
+				// If we find a division that's top level, we must consider it too!
+				if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == "/" &&
+				   std::find(divs.begin(), divs.end(), i) != divs.end())
+				{
+					// Get the division size that was computed previously
+					target_size += tokens[i].render_w;
+					target_height = std::max(target_height, tokens[i].render_h);
+				}
+			}
+			else
+			{
+				int width, off, offx;
+				std::string text;
+				get_render(i, width, off, offx, text);
+				target_size += width + off + offx;
+				target_height = std::max(target_height, 32);
+			}
+		}
+	};
+
+	dimension(num_size, num_height, open_par_num + 1, pos - 1, num_divs_par, num_divs);
+	dimension(den_size, den_height, pos + 2, close_par_den, den_divs_par, den_divs);
+
+	nw = num_size;
+	dw = den_size;
+	nh = num_height;
+	dh = den_height;
+}
+
+void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, framebuffer::FB *fb, bool in_pars)
+{
+	auto lowest_divs = find_minimum_depth_operators("/", start, end);
+	std::vector<std::pair<int, int>> lowest_divs_par;
+
+	for(size_t div : lowest_divs)
+	{
+		lowest_divs_par.push_back(find_left_right_pair(div));
+	}
+
+	// Now we draw symbols like in simple mode but being careful of divisions
+	// which we must draw recursively
+	int x = sx;
+	int y = sy;
+	// We skip the pars
+	if(in_pars)
+	{
+		start++;
+		end--;
+	}
+	for(size_t ti = start; ti < end; ti++)
+	{
+		bool in_div = false;
+		for(size_t j = 0; j < lowest_divs_par.size(); j++)
+		{
+			if(lowest_divs_par[j].first <= ti && lowest_divs_par[j].second >= ti)
+			{
+				in_div = true;
+				break;
+			}
+		}
+
+		if(in_div)
+		{
+			// If we find the division symbol, draw the fraction recursively
+			if(tokens[ti].type == MathToken::OPERATOR && tokens[ti].value == "/" &&
+			   std::find(lowest_divs.begin(), lowest_divs.end(), ti) != lowest_divs.end())
+			{
+				draw_div(x, y, ti, fb);
+				x += tokens[ti].render_w;
+			}
+		}
+		else
+		{
+			auto &tok = tokens[ti];
+			std::string text = "";
+			int width, off, offx;
+
+			get_render(ti, width, off, offx, text);
+
+			fb->draw_text(x + offx, y, text, 64);
+			//tok.render_x = x + offx;
+			//tok.render_y = y;
+			int twidth = width + off;
+			//tok.render_w = twidth;
+			//tok.render_h = 64;
+			//tok.render_offset = off;
+			x += twidth + offx;
+		}
+	}
+
+	last_maxx = x;
 
 }
+
 
 int MathToken::get_precedence()
 {

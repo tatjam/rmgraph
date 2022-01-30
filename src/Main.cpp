@@ -22,8 +22,8 @@ int main()
 	auto text = new ui::Text(0, 0, 200, 50, "Hello, good bad world!");
 	scene->add(text);
 
-	auto notebook = new Notebook(0, 0, 1404, 1872);
-	scene->add(notebook);
+	//auto notebook = new Notebook(0, 0, 1404, 1872);
+	//scene->add(notebook);
 
 	MathExpression expr = MathExpression();
 	auto kb = new MathKeyboard(0, 0, 1404, 1872);
@@ -40,11 +40,11 @@ int main()
 	while(!exit)
 	{
 		ui::MainLoop::main();
-		if(notebook->last_pen.x >= 1300 && notebook->last_pen.y <= 100)
+		/*if(notebook->last_pen.x >= 1300 && notebook->last_pen.y <= 100)
 		{
 			printf("EXPR!\n");
 			exit = true;
-		}
+		}*/
 		ui::MainLoop::redraw();
 		ui::MainLoop::read_input();
 	}

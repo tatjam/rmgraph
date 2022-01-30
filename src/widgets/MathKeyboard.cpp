@@ -32,6 +32,8 @@ void MathKeyboard::on_mouse_down(input::SynMotionEvent &ev)
 				ev.y < tok.render_y + tok.render_h)
 			{
 				working_pos = i;
+				dirty = true;
+				draw_expression = true;
 				return;
 			}
 		}
@@ -92,7 +94,7 @@ void MathKeyboard::render()
 
 	if(draw_expression && working)
 	{
-		working->draw(40, 900, fb);
+		working->draw(40, 300, fb);
 		working->draw_cursor(working_pos, fb);
 		draw_expression = false;
 	}
@@ -266,7 +268,7 @@ void MathKeyboard::on_click(Button* b)
 	bool insert_parens_around_prev = false;
 	bool insert_parens_around_placeholder = false;
 
-	if(b->as_char == "+" || b->as_char == "-" || b->as_char == "*" || b->as_char == "^")
+	if(b->as_char == "+" || b->as_char == "-" || b->as_char == "*")
 	{
 		// Simple operators, we insert them and a placeholder
 		tok.type = MathToken::OPERATOR;
@@ -274,7 +276,7 @@ void MathKeyboard::on_click(Button* b)
 		insert_placeholder = 1;
 		needs_prev_placeholder = true;
 	}
-	else if(b->as_char == "/")
+	else if(b->as_char == "/" || b->as_char == "^")
 	{
 		tok.type = MathToken::OPERATOR;
 		tok.value = b->as_char;
@@ -396,8 +398,8 @@ void MathKeyboard::on_click(Button* b)
 			{
 
 				insert_or_push(tokens, working_pos - 1, placeholder);
-				first_placeholder = working_pos;
 				working_pos++;
+				first_placeholder = working_pos - tokl.size() + 1;
 			}
 		}
 
@@ -420,9 +422,11 @@ void MathKeyboard::on_click(Button* b)
 					paren_depth--;
 				}
 				else if(tokens[ptr].type == MathToken::OPERATOR &&
-					(tokens[ptr].value == "+" || tokens[ptr].value == "-") && paren_depth == 0)
+					(tokens[ptr].value == "+" || tokens[ptr].value == "-") && paren_depth == 0
+					|| paren_depth < 0)
 				{
 					finish = ptr;
+					break;
 				}
 
 				ptr--;

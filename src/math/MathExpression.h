@@ -31,7 +31,6 @@ struct MathToken
 	numer_t operate(numer_t x, numer_t y) const;
 	numer_t function(std::vector<numer_t> x);
 
-	// Set by the maths keyboard
 	int render_x, render_y;
 	int render_w, render_h;
 	// Clear space to the right of the symbol
@@ -45,6 +44,16 @@ class MathExpression
 private:
 
 	int prev_cursorx0 = -1, prev_cursory = -1, prev_cursorx1 = -1;
+
+	// finds the operators of given type of minimum depth within two parenthesis
+	std::vector<size_t> find_minimum_depth_operators(std::string op_value, int lpar, int rpar);
+	// Finds leftwards right paren, and rightwards left paren (the others are obvious, pos + 1, pos - 1)
+	std::pair<int, int> find_left_right_pair(size_t pos);
+	void dimension_div(size_t pos);
+	void find_div_num_denum_sizes(size_t pos, bool dimension_child, int& nw, int& dw, int& nh, int& dh);
+	// Recursive, draws all child divs
+	void draw_div(int sx, int sy, size_t pos, framebuffer::FB* fb);
+	void draw_advanced_expr(int x, int y, int start, int end, framebuffer::FB* fb, bool in_pars);
 
 public:
 	// If set, contains the error code
@@ -62,6 +71,7 @@ public:
 	void draw_simple(int sx, int sy, framebuffer::FB* fb);
 	void draw_advanced(int sx, int sy, framebuffer::FB* fb);
 	void draw_cursor(size_t working_pos, framebuffer::FB* fb);
+	void get_render(size_t pos, int& width, int& off, int& offx, std::string& text);
 };
 
 // A context associates variables with expressions
