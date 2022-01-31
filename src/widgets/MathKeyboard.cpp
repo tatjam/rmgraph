@@ -246,21 +246,19 @@ void MathKeyboard::on_click(Button* b)
 		return;
 	}
 
-	printf("before: working_pos = %i\n", working_pos);
 	working->old_tokens = working->tokens;
 
-	MathToken placeholder, lparen, rparen, comma;
+	MathToken placeholder, lparen, rparen, comma, mult;
 	placeholder.type = MathToken::DUMMY;
 	lparen.type = MathToken::LPAREN;
 	rparen.type = MathToken::RPAREN;
 	comma.type = MathToken::COMMA;
+	mult.type = MathToken::OPERATOR; mult.value = "*";
 
 
 	// All these tokens are inserted as a whole group
 	std::vector<MathToken> tokl;
-	tokl.push_back(MathToken());
-	// For convenience of code
-	auto& tok = tokl[0];
+	tokl.emplace_back();
 
 	bool build_number = false;
 	int insert_placeholder = 0;
@@ -268,18 +266,20 @@ void MathKeyboard::on_click(Button* b)
 	bool insert_parens_around_prev = false;
 	bool insert_parens_around_placeholder = false;
 
+	// WARNING: If you create a multi-token, don't use tok after pushing to tokl!
+	// (it will be revalidated after the if block)
 	if(b->as_char == "+" || b->as_char == "-" || b->as_char == "*")
 	{
 		// Simple operators, we insert them and a placeholder
-		tok.type = MathToken::OPERATOR;
-		tok.value = b->as_char;
+		tokl[0].type = MathToken::OPERATOR;
+		tokl[0].value = b->as_char;
 		insert_placeholder = 1;
 		needs_prev_placeholder = true;
 	}
 	else if(b->as_char == "/" || b->as_char == "^")
 	{
-		tok.type = MathToken::OPERATOR;
-		tok.value = b->as_char;
+		tokl[0].type = MathToken::OPERATOR;
+		tokl[0].value = b->as_char;
 		insert_placeholder = 1;
 		insert_parens_around_placeholder = true;
 		insert_parens_around_prev = true;
@@ -288,40 +288,55 @@ void MathKeyboard::on_click(Button* b)
 	// Single argument functions
 	else if(b->as_char == "sin")
 	{
-		tok.type = MathToken::FUNCTION;
-		tok.value = b->as_char;
+		tokl[0].type = MathToken::FUNCTION;
+		tokl[0].value = b->as_char;
 		insert_placeholder = 1;
 		insert_parens_around_placeholder = true;
 	}
 	// Two argument functions
 	else if(b->as_char == "max")
 	{
-		tok.type = MathToken::FUNCTION;
-		tok.value = b->as_char;
+		tokl[0].type = MathToken::FUNCTION;
+		tokl[0].value = b->as_char;
 		insert_placeholder = 2;
 		insert_parens_around_placeholder = true;
 	}
 	else if(b->as_char == "a\xC2\xB2")
 	{
 		// Insert ^2 block
-		tok.type = MathToken::OPERATOR;
-		tok.value = "^";
+		tokl[0].type = MathToken::OPERATOR;
+		tokl[0].value = "^";
 		needs_prev_placeholder = true;
-		tokl.push_back(MathToken());
-		tokl[1].type = MathToken::NUMBER;
-		tokl[1].value = "2";
+		insert_parens_around_prev = true;
+		tokl.emplace_back();
+		tokl[1].type = MathToken::LPAREN;
+		tokl.emplace_back();
+		tokl[2].type = MathToken::NUMBER;
+		tokl[2].value = "2";
+		tokl.emplace_back();
+		tokl[3].type = MathToken::RPAREN;
+	}
+	else if(b->as_char == "(")
+	{
+		tokl[0].type = MathToken::LPAREN;
+	}
+	else if(b->as_char == ")")
+	{
+		tokl[0].type = MathToken::RPAREN;
 	}
 	else if(is_buildable_number(b->as_char))
 	{
-		tok.type = MathToken::NUMBER;
-		tok.value = b->as_char;
+		tokl[0].type = MathToken::NUMBER;
+		tokl[0].value = b->as_char;
 		build_number = true;
 	}
 	else
 	{
-		tok.type == MathToken::VARIABLE;
-		tok.value = b->as_char;
+		tokl[0].type == MathToken::VARIABLE;
+		tokl[0].value = b->as_char;
 	}
+
+	auto& tok = tokl[0];
 
 	auto& tokens = working->tokens;
 
@@ -330,49 +345,104 @@ void MathKeyboard::on_click(Button* b)
 
 	if(build_number)
 	{
-		// If there's another buildable number previously, add to it
-		if(!tokens.empty() && tokens[working_pos].type == MathToken::NUMBER &&
-			is_buildable_number(tokens[working_pos].value))
+		bool dont_add = false;
+		if(!tokens.empty() && tokens[working_pos].type == MathToken::OPERATOR)
 		{
-			// Check that it doesn't have two decimal points
-			if(tok.value == ".")
+			// We try to replace the number to the right if it's easy to do, otherwise do nothing
+			// This is safe to do thanks to placeholders
+			if(tokens[working_pos + 1].type == MathToken::NUMBER)
 			{
-				for(size_t i = 0; i < tokens[working_pos].value.size(); i++)
-				{
-					if(tokens[working_pos].value[i] == '.')
-					{
-						// We don't do anything in this case
-						return;
-					}
-				}
+				tokens[working_pos + 1].value = "";
+				working_pos++;
 			}
-
-			tokens[working_pos].value += tok.value;
-			// We don't advance working pos!
-		}
-		else
-		{
-			// Add the number or replace dummy
-			if (!tokens.empty() && tokens[working_pos].type == MathToken::DUMMY)
+			else if(tokens[working_pos + 1].type == MathToken::LPAREN &&
+				tokens.size() > working_pos + 1 && tokens[working_pos + 2].type == MathToken::NUMBER)
 			{
-				// We replace the dummy which is already properly parenthesized, etc...
-				tokens[working_pos] = tok;
+				tokens[working_pos + 2].value = "";
+				working_pos += 2;
 			}
 			else
 			{
-				// We are adding next to something, insert next to working_pos and advance
-				insert_or_push(tokens, working_pos, tok);
-				working_pos++;
+				dont_add = true;
 			}
 		}
+		if(!dont_add)
+		{
+			// If there's another buildable number previously, add to it
+			if (!tokens.empty() && tokens[working_pos].type == MathToken::NUMBER &&
+				is_buildable_number(tokens[working_pos].value))
+			{
+				// Check that it doesn't have two decimal points
+				if (tok.value == ".")
+				{
+					for (size_t i = 0; i < tokens[working_pos].value.size(); i++)
+					{
+						if (tokens[working_pos].value[i] == '.')
+						{
+							// We don't do anything in this case
+							return;
+						}
+					}
+				}
+
+				tokens[working_pos].value += tok.value;
+				// We don't advance working pos!
+			}
+			else
+			{
+				// Add the number or replace dummy
+				if (!tokens.empty() && tokens[working_pos].type == MathToken::DUMMY)
+				{
+					// We replace the dummy which is already properly parenthesized, etc...
+					tokens[working_pos] = tok;
+				}
+				else
+				{
+					// We are adding next to something, insert next to working_pos and advance
+					insert_or_push(tokens, working_pos, tok);
+					working_pos++;
+				}
+			}
+		}
+	}
+	else if(!tokens.empty() && tokens[working_pos].type == MathToken::OPERATOR &&
+		tok.type == MathToken::OPERATOR)
+	{
+		// Replace the operator or do nothing while trying to add a group or special operators
+		if(tokl.size() == 1 && tok.value != "/" && tok.value != "^")
+		{
+			tokens[working_pos].value = tok.value;
+		}
+
 	}
 	else
 	{
 		// Now do the smart insertion
-		if (!tokens.empty() && tokens[working_pos].type == MathToken::DUMMY)
+		if (!tokens.empty() && tokens[working_pos].type == MathToken::DUMMY
+			&& tok.type != MathToken::OPERATOR)
 		{
 			// We replace the dummy which is already properly parenthesized, etc...
 			replace_dummy(tokens, working_pos, tokl);
+		}
+		// If we add ( to the right of a number / variable, add a multiplication sign too
+		else if(!tokens.empty() && tok.type == MathToken::LPAREN &&
+			(tokens[working_pos].type == MathToken::NUMBER || tokens[working_pos].type == MathToken::VARIABLE))
+		{
+			// Special case, if to the right is an operator, we replace it by the multiplication
+			if(tokens.size() > working_pos + 1 && tokens[working_pos + 1].type == MathToken::OPERATOR)
+			{
+				tokens[working_pos + 1].value = "*";
+			}
+			else
+			{
+				insert_or_push(tokens, working_pos, mult);
+			}
+
+			working_pos++;
+			insert_or_push(tokens, working_pos, tok);
+			working_pos++;
+
+			// Now, we may need placeholders, or just to close the parenthesis to the right
 		}
 		else
 		{
@@ -408,7 +478,7 @@ void MathKeyboard::on_click(Button* b)
 			// This is actually quite complex, we parenthesize until we find:
 			// a (+ or -) or we reach the end of the document
 			// We respect parenthesis so if we find a + or - inside parenthesis it doesn't matter
-			int ptr = working_pos;
+			int ptr = working_pos - tokl.size() + 1;
 			int paren_depth = 0;
 			int finish = -1;
 			while(ptr != 0)
@@ -434,7 +504,7 @@ void MathKeyboard::on_click(Button* b)
 
 			insert_or_push(tokens, finish, lparen);
 			working_pos++;
-			insert_or_push(tokens, working_pos - 1, rparen);
+			insert_or_push(tokens, working_pos - tokl.size(), rparen);
 			working_pos++;
 		}
 
@@ -470,10 +540,12 @@ void MathKeyboard::on_click(Button* b)
 			working_pos = first_placeholder;
 		}
 
+		if(working_pos >= tokens.size())
+		{
+			working_pos = tokens.size();
+		}
 
 	}
-
-	printf("after: working_pos = %i\n", working_pos);
 }
 
 bool MathKeyboard::is_buildable_number(std::string str)

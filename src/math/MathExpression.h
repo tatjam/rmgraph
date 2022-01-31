@@ -71,7 +71,7 @@ public:
 	void draw_simple(int sx, int sy, framebuffer::FB* fb);
 	void draw_advanced(int sx, int sy, framebuffer::FB* fb);
 	void draw_cursor(size_t working_pos, framebuffer::FB* fb);
-	void get_render(size_t pos, int& width, int& off, int& offx, std::string& text);
+	void get_render(size_t pos, int& width, int& off, int& offx, std::string& text, bool simp_mult);
 };
 
 // A context associates variables with expressions

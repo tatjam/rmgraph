@@ -4,6 +4,7 @@
 #include <cmath>
 #include "util.h"
 
+#define DIV_EXTRA_SPACE 20
 
 std::optional<numer_t> MathExpression::evaluate(MathContext* in_context)
 {
@@ -91,6 +92,11 @@ struct SimpleElement
 void MathExpression::draw(int sx, int sy, framebuffer::FB* fb)
 {
 	// We do very simplistic math rendering, just handling fractions, square roots, and exponentiations
+	// Remove all interactions first
+	for(MathToken& tok : tokens)
+	{
+		tok.render_x = 0; tok.render_y = 0; tok.render_w = 0; tok.render_h = 0;
+	}
 	auto rpn = get_rpn();
 	if(!rpn.has_value() || true)
 	{
@@ -107,7 +113,7 @@ void MathExpression::draw(int sx, int sy, framebuffer::FB* fb)
 
 }
 
-void MathExpression::get_render(size_t pos, int& width, int& off, int& offx, std::string& text)
+void MathExpression::get_render(size_t pos, int& width, int& off, int& offx, std::string& text, bool simp_mult)
 {
 	int base_width = 34;
 	width = 0;
@@ -120,7 +126,7 @@ void MathExpression::get_render(size_t pos, int& width, int& off, int& offx, std
 	   || tok.type == MathToken::NUMBER)
 	{
 		text = tok.value;
-		if(tok.value == "*")
+		if(tok.value == "*" && simp_mult)
 		{
 			text = "\xC2\xB7";
 			// We don't display the * if to its right is a variable or function or parenthesis and to its left a number
@@ -182,7 +188,7 @@ void MathExpression::draw_simple(int sx, int sy, framebuffer::FB* fb)
 		int off = 0;
 		int offx = 0;
 
-		get_render(ti, width, off, offx, text);
+		get_render(ti, width, off, offx, text, false);
 
 		fb->draw_text(x + offx, y, text, 64);
 		tok.render_x = x + offx;
@@ -238,7 +244,7 @@ void MathExpression::dimension_div(size_t pos)
 {
 	int nw, dw, nh, dh;
 	find_div_num_denum_sizes(pos, true, nw, dw, nh, dh);
-	tokens[pos].render_w = max(nw, dw) + 10;
+	tokens[pos].render_w = max(nw, dw) + DIV_EXTRA_SPACE * 2;
 	tokens[pos].render_h = nh + dh + 10;
 }
 
@@ -305,17 +311,16 @@ void MathExpression::draw_advanced(int sx, int sy, framebuffer::FB *fb)
 void MathExpression::draw_div(int sx, int sy, size_t pos, framebuffer::FB* fb)
 {
 	// first, we draw the line
-	int div_width = tokens[pos].render_w;
+	int div_width = tokens[pos].render_w - DIV_EXTRA_SPACE;
 
-	fb->draw_line(sx, sy + 32, sx + div_width - 6, sy + 32, 3, BLACK);
+	fb->draw_line(sx, sy + 32, sx + div_width, sy + 32, 3, BLACK);
 	// Now we recursively draw num and denum, centered
 	int nw, dw, nh, dh;
 	find_div_num_denum_sizes(pos, false, nw, dw, nh, dh);
 	auto[left, right] = find_left_right_pair(pos);
 	int top_free = div_width - nw;
 	int bottom_free = div_width - dw;
-	// Stuff grows upwards, so the numerator is never a problem
-	draw_advanced_expr(sx + top_free / 2, sy - 32, left, pos, fb, true);
+	draw_advanced_expr(sx + top_free / 2, sy - nh, left, pos, fb, true);
 	// The denominator we need to consider height
 	draw_advanced_expr(sx + bottom_free / 2, sy + dh, pos + 1, right + 1, fb, true);
 
@@ -464,6 +469,7 @@ void MathExpression::draw_cursor(size_t working_pos, framebuffer::FB *fb)
 	prev_cursorx1 = x + w;
 	prev_cursory = y;
 
+
 }
 
 void MathExpression::find_div_num_denum_sizes(size_t pos, bool dimension_child, int& nw, int& dw, int& nh, int& dh)
@@ -535,9 +541,9 @@ void MathExpression::find_div_num_denum_sizes(size_t pos, bool dimension_child, 
 			{
 				int width, off, offx;
 				std::string text;
-				get_render(i, width, off, offx, text);
+				get_render(i, width, off, offx, text, true);
 				target_size += width + off + offx;
-				target_height = std::max(target_height, 32);
+				target_height = std::max(target_height, 28);
 			}
 		}
 	};
@@ -555,10 +561,13 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 {
 	auto lowest_divs = find_minimum_depth_operators("/", start, end);
 	std::vector<std::pair<int, int>> lowest_divs_par;
+	std::unordered_map<size_t, std::pair<int, int>> div_to_pars;
 
 	for(size_t div : lowest_divs)
 	{
-		lowest_divs_par.push_back(find_left_right_pair(div));
+		auto pars = find_left_right_pair(div);
+		lowest_divs_par.push_back(pars);
+		div_to_pars[div] = pars;
 	}
 
 	// Now we draw symbols like in simple mode but being careful of divisions
@@ -591,6 +600,22 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 			{
 				draw_div(x, y, ti, fb);
 				x += tokens[ti].render_w;
+				// Disable interaction with the fraction, but enable it for the right parenthesis
+				auto pars = div_to_pars[ti];
+				tokens[pars.second].render_x = x - 15;
+				tokens[pars.second].render_y = y;
+				if(tokens.size() <= pars.second + 1)
+				{
+					// Specially big and easy to click
+					tokens[pars.second].render_w = 45;
+				}
+				else
+				{
+					tokens[pars.second].render_w = 30;
+				}
+				tokens[pars.second].render_h = 27 * 2;
+
+				tokens[ti].render_w = tokens[ti].render_h = tokens[ti].render_x = tokens[ti].render_y = 0;
 			}
 		}
 		else
@@ -599,15 +624,15 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 			std::string text = "";
 			int width, off, offx;
 
-			get_render(ti, width, off, offx, text);
+			get_render(ti, width, off, offx, text, true);
 
 			fb->draw_text(x + offx, y, text, 64);
-			//tok.render_x = x + offx;
-			//tok.render_y = y;
+			tok.render_x = x + offx;
+			tok.render_y = y;
 			int twidth = width + off;
-			//tok.render_w = twidth;
-			//tok.render_h = 64;
-			//tok.render_offset = off;
+			tok.render_w = twidth;
+			tok.render_h = 27 * 2;
+			tok.render_offset = off;
 			x += twidth + offx;
 		}
 	}
