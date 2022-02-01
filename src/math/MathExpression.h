@@ -33,6 +33,8 @@ struct MathToken
 
 	int render_x, render_y;
 	int render_w, render_h;
+	// For parenthesis rendering
+	int old_height;
 	// Clear space to the right of the symbol
 	int render_offset;
 };

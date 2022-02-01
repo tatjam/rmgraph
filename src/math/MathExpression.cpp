@@ -205,34 +205,44 @@ void MathExpression::draw_simple(int sx, int sy, framebuffer::FB* fb)
 
 std::vector<size_t> MathExpression::find_minimum_depth_operators(std::string op_value, int lpar, int rpar)
 {
-	// We find the divisions higher up in the hierarchy
+	// This finds operators that are not within the parenthesis of other operators
 	std::vector<size_t> lowest_found;
-
-	int pdepth = 0;
-	int min_pdepth = INT_MAX;
 	for(size_t i = lpar; i < rpar; i++)
 	{
-		if(tokens[i].type == MathToken::LPAREN)
+		if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == op_value)
 		{
-			pdepth++;
+			lowest_found.push_back(i);
 		}
-		else if(tokens[i].type == MathToken::RPAREN)
-		{
-			pdepth--;
-		}
-		else if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == op_value)
-		{
-			if(pdepth < min_pdepth)
-			{
-				lowest_found.clear();
-				min_pdepth = pdepth;
-			}
+	}
 
-			// Now we can push it
-			if(pdepth == min_pdepth)
+	std::unordered_map<size_t, std::pair<int, int>> pars;
+	// Now find all parenthesis
+	for(size_t op : lowest_found)
+	{
+		pars[op] = find_left_right_pair(op);
+	}
+
+	// Now remove all that are within parenthesis
+	for(auto it = lowest_found.begin(); it != lowest_found.end();)
+	{
+		size_t pos = *it;
+		bool in_pars = false;
+		for(const auto& pair : pars)
+		{
+			if((pair.second.first < pos && pair.first > pos) ||
+				pair.first < pos && pair.second.second > pos)
 			{
-				lowest_found.push_back(i);
+				in_pars = true;
+				break;
 			}
+		}
+		if(in_pars)
+		{
+			it = lowest_found.erase(it);
+		}
+		else
+		{
+			it++;
 		}
 	}
 
@@ -246,6 +256,7 @@ void MathExpression::dimension_div(size_t pos)
 	find_div_num_denum_sizes(pos, true, nw, dw, nh, dh);
 	tokens[pos].render_w = max(nw, dw) + DIV_EXTRA_SPACE * 2;
 	tokens[pos].render_h = nh + dh + 10;
+	tokens[pos].old_height = tokens[pos].render_h;
 }
 
 std::pair<int, int> MathExpression::find_left_right_pair(size_t pos)
@@ -266,7 +277,7 @@ std::pair<int, int> MathExpression::find_left_right_pair(size_t pos)
 			pardepth++;
 		}
 		i--;
-	} while(pardepth != 0);
+	} while(pardepth != 0 && i >= 0);
 
 	num_open_par = i + 1;
 
@@ -283,7 +294,7 @@ std::pair<int, int> MathExpression::find_left_right_pair(size_t pos)
 			pardepth++;
 		}
 		i++;
-	} while(pardepth != 0);
+	} while(pardepth != 0 && i < tokens.size());
 
 	den_close_par = i - 1;
 
@@ -320,9 +331,9 @@ void MathExpression::draw_div(int sx, int sy, size_t pos, framebuffer::FB* fb)
 	auto[left, right] = find_left_right_pair(pos);
 	int top_free = div_width - nw;
 	int bottom_free = div_width - dw;
-	draw_advanced_expr(sx + top_free / 2, sy - nh, left, pos, fb, true);
+	draw_advanced_expr(sx + top_free / 2, sy - nh - 10, left, pos, fb, true);
 	// The denominator we need to consider height
-	draw_advanced_expr(sx + bottom_free / 2, sy + dh, pos + 1, right + 1, fb, true);
+	draw_advanced_expr(sx + bottom_free / 2, sy + dh + 10, pos + 1, right + 1, fb, true);
 
 }
 
@@ -562,6 +573,70 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 	auto lowest_divs = find_minimum_depth_operators("/", start, end);
 	std::vector<std::pair<int, int>> lowest_divs_par;
 	std::unordered_map<size_t, std::pair<int, int>> div_to_pars;
+	// Simple exponents are those formed without any division in the exponent, which we can draw with ease,
+	// and we also make sure they don't contain any further exponents
+	std::vector<std::pair<int, int>> simple_exponents;
+	std::vector<int> ignore;
+	std::vector<int> exit_par;
+	// Find simple exponents
+	for(size_t i = start; i < end; i++)
+	{
+		if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == "^")
+		{
+			auto[left, right] = find_left_right_pair(i);
+			// Explore the exponent, see if it's a simple one
+			bool is_simple = true;
+			for(size_t j = i + 1; j < right; j++)
+			{
+				if(tokens[j].type == MathToken::OPERATOR && (tokens[j].value == "/" || tokens[j].value == "^"))
+				{
+					is_simple = false;
+					break;
+				}
+			}
+			if(!is_simple)
+			{
+				break;
+			}
+
+			simple_exponents.push_back(std::make_pair(i + 1, right));
+			ignore.push_back(i + 1);
+			ignore.push_back(right);
+			ignore.push_back(i);
+			// Now, see if we can remove parenthesis of the base, this is only done if it doesn't contain a fraction
+			// and it doesn't already have parens
+			bool ignore_left = true;
+			std::vector<std::pair<int, int>> div_parens;
+
+			for (size_t j = left; j < i; j++)
+			{
+				if (tokens[j].type == MathToken::OPERATOR && tokens[j].value == "/")
+				{
+					div_parens.push_back(find_left_right_pair(j));
+				}
+			}
+
+			// If there are already user parens, then we don't need to draw our parens
+			if(tokens[i - 2].type == MathToken::RPAREN)
+			{
+				for (size_t j = 0; j < div_parens.size(); j++)
+				{
+					if (div_parens[j].second == i - 2)
+					{
+						ignore_left = false;
+						break;
+					}
+				}
+			}
+
+			if(ignore_left)
+			{
+				ignore.push_back(left);
+				ignore.push_back(i - 1);
+			}
+			exit_par.push_back(right);
+		}
+	}
 
 	for(size_t div : lowest_divs)
 	{
@@ -620,20 +695,100 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 		}
 		else
 		{
-			auto &tok = tokens[ti];
-			std::string text = "";
-			int width, off, offx;
+			bool in_ignore = std::find(ignore.begin(), ignore.end(), ti) != ignore.end();
+			// Check if we are inside a simple exponent
+			bool in_exponent = false;
+			for(size_t j = 0; j < simple_exponents.size(); j++)
+			{
+				if(simple_exponents[j].first < ti && simple_exponents[j].second > ti)
+				{
+					in_exponent = true;
+					break;
+				}
+			}
+			if(std::find(exit_par.begin(), exit_par.end(), ti) != exit_par.end())
+			{
+				// We just give it dimensions to be able to exit the exponent
+				tokens[ti].render_x = x;
+				tokens[ti].render_y = y;
+				tokens[ti].render_w = 30;
+				tokens[ti].render_h = 64;
+				x += 15;
+			}
+			else if(!in_ignore && (tokens[ti].type == MathToken::LPAREN || tokens[ti].type == MathToken::RPAREN))
+			{
+				bool left = tokens[ti].type == MathToken::RPAREN;
+				int ptr = ti;
+				int par_depth = 0;
+				// The code is fairly simple because we only need to find the max
+				int max_v_size = 32;
+				while(true)
+				{
+					if(tokens[ptr].type == (left ? MathToken::LPAREN : MathToken::RPAREN))
+					{
+						par_depth--;
+					}
+					else if(tokens[ptr].type == (left ? MathToken::RPAREN : MathToken::LPAREN))
+					{
+						par_depth++;
+					}
+					// We only care about divs because they are the only ones which grow vertically
+					// and have been previously dimensioned
+					else if(tokens[ptr].type == MathToken::OPERATOR && tokens[ptr].value == "/")
+					{
+						max_v_size = max(max_v_size, tokens[ptr].old_height - 10);
+					}
 
-			get_render(ti, width, off, offx, text, true);
+					if(par_depth == 0 || ptr < 0 || ptr >= tokens.size())
+					{
+						break;
+					}
+					ptr += left ? -1 : 1;
+				}
 
-			fb->draw_text(x + offx, y, text, 64);
-			tok.render_x = x + offx;
-			tok.render_y = y;
-			int twidth = width + off;
-			tok.render_w = twidth;
-			tok.render_h = 27 * 2;
-			tok.render_offset = off;
-			x += twidth + offx;
+				auto &tok = tokens[ti];
+				int px = x + (left ? 0 : 12);
+				int yoff = max_v_size == 32 ? 0 : max_v_size / 3;
+				int cx = x + (left ? 6 : 6);
+				int cy = y + max_v_size;
+				// We have to draw a bezier manually to prevent the parenthesis from growing very thick
+				fb->draw_bezier(px, y + yoff + 4, cx, cy, cx,cy,
+								px, y + max_v_size * 2 - yoff - 4, 4, BLACK);
+				tok.render_x = x;
+				tok.render_y = y;
+				tok.render_w = 32;
+				tok.render_h = max_v_size * 2;
+				tok.render_offset = 0;
+				x += 20;
+			}
+			else if(!in_ignore)
+			{
+
+				auto &tok = tokens[ti];
+				std::string text = "";
+				int width, off, offx, ry = y, height = 27 * 2;
+
+				get_render(ti, width, off, offx, text, true);
+				if(in_exponent)
+				{
+					height *= 0.7;
+					width *= 0.7;
+					ry -= 5;
+					fb->draw_text(x + offx, ry, text, 64 * 0.7);
+				}
+				else
+				{
+					fb->draw_text(x + offx, y, text, 64);
+				}
+
+				tok.render_x = x + offx;
+				tok.render_y = ry;
+				int twidth = width + off;
+				tok.render_w = twidth;
+				tok.render_h = height;
+				tok.render_offset = off;
+				x += twidth + offx;
+			}
 		}
 	}
 

@@ -264,6 +264,7 @@ void MathKeyboard::on_click(Button* b)
 	int insert_placeholder = 0;
 	bool needs_prev_placeholder = false;
 	bool insert_parens_around_prev = false;
+	bool parens_around_prev_include_mult = true;
 	bool insert_parens_around_placeholder = false;
 
 	// WARNING: If you create a multi-token, don't use tok after pushing to tokl!
@@ -283,6 +284,10 @@ void MathKeyboard::on_click(Button* b)
 		insert_placeholder = 1;
 		insert_parens_around_placeholder = true;
 		insert_parens_around_prev = true;
+		if(b->as_char == "^")
+		{
+			parens_around_prev_include_mult = false;
+		}
 		needs_prev_placeholder = true;
 	}
 	// Single argument functions
@@ -308,6 +313,7 @@ void MathKeyboard::on_click(Button* b)
 		tokl[0].value = "^";
 		needs_prev_placeholder = true;
 		insert_parens_around_prev = true;
+		parens_around_prev_include_mult = false;
 		tokl.emplace_back();
 		tokl[1].type = MathToken::LPAREN;
 		tokl.emplace_back();
@@ -492,8 +498,9 @@ void MathKeyboard::on_click(Button* b)
 					paren_depth--;
 				}
 				else if(tokens[ptr].type == MathToken::OPERATOR &&
-					(tokens[ptr].value == "+" || tokens[ptr].value == "-") && paren_depth == 0
-					|| paren_depth < 0)
+					(tokens[ptr].value == "+" || tokens[ptr].value == "-" ||
+					(tokens[ptr].value == "*" && !parens_around_prev_include_mult))
+					&& paren_depth == 0 || paren_depth < 0)
 				{
 					finish = ptr;
 					break;
