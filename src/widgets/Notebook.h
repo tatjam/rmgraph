@@ -4,6 +4,7 @@
 #include <queue>
 #include "rmkit.h"
 #include "util/Vec.h"
+#include "math/MathExpression.h"
 
 struct DrawnLine
 {
@@ -15,27 +16,12 @@ struct DrawnStroke
 	std::vector<DrawnLine> lines;
 };
 
-// Basically a child of
-struct NotebookObject
-{
-	enum Type
-	{
-		FUNCTION, // expr(x, y) = expr(x, y), allows plotting.
-		PARAMETRIC, // f(t) = (f_x(t), f_y(t)), allows plotting
-	};
-
-	Type type;
-
-	std::string lhs;
-	std::string rhs;
-};
-
 // A Page contains user drawn stuff and equations (math objects)
 // The MathObjects are not neccesarily in the same page as their display
 struct Page
 {
 	std::vector<DrawnStroke> drawn;
-	std::vector<NotebookObject> objects;
+	std::vector<MathExpression> exprs;
 
 };
 
@@ -47,15 +33,12 @@ class Notebook : public ui::Widget
 private:
 
 	std::vector<DrawnLine> drawing;
-	bool in_draw;
 
 	void draw_graph();
 	void draw_bottom();
 
 	void on_pen_move();
 
-	bool bottom_dirty;
-	bool top_dirty;
 
 	Vec2i transform_point(Vec2f p);
 	bool in_bounds_x(const Vec2i p) const
@@ -77,6 +60,11 @@ private:
 
 
 public:
+
+	bool top_dirty;
+	bool bottom_dirty;
+	bool redraw_bottom;
+	bool in_draw;
 
 	bool in_drag = false;
 	bool first_white_cross = false;
@@ -103,6 +91,7 @@ public:
 	virtual void on_mouse_hover(input::SynMotionEvent& ev) override;
 
 	virtual void render() override;
+	void on_exit_kb();
 
 	Notebook(int x, int y, int w, int h);
 

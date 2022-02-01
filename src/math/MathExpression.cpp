@@ -708,13 +708,16 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 				}
 
 				auto &tok = tokens[ti];
-				int px = x + (left ? 0 : 12);
-				int yoff = max_v_size == 32 ? 0 : max_v_size / 3;
-				int cx = x + (left ? 6 : 6);
-				int cy = y + max_v_size;
+				int px = x + (left ? 0 : 16);
+				int cx = x + (left ? 8 : 8);
+				int yup = (max_v_size - 32);
+				int starty = y + 12 - yup;
+				int endy = y + max_v_size * 2 - 12 - yup / 2;
+				int p1y = starty + 15;
+				int p2y = endy - 15;
 				// We have to draw a bezier manually to prevent the parenthesis from growing very thick
-				fb->draw_bezier(px, y + yoff + 4, cx, cy, cx,cy,
-								px, y + max_v_size * 2 - yoff - 4, 4, BLACK);
+				fb->draw_bezier(px, y + 12 - yup, cx, p1y, cx,p2y,
+								px, y + max_v_size * 2 - 12 - yup / 2, 4, BLACK);
 				tok.render_x = x;
 				tok.render_y = y;
 				tok.render_w = 32;

@@ -1,4 +1,5 @@
 #include "MathKeyboard.h"
+#include "Buttons.h"
 
 
 void MathKeyboard::on_mouse_down(input::SynMotionEvent &ev)
@@ -10,12 +11,12 @@ void MathKeyboard::on_mouse_down(input::SynMotionEvent &ev)
 	was_down = true;
 	if(ev.y > keyboard_start)
 	{
-		handle_buttons(active_buttons, ev.x, ev.y);
+		active_buttons->handle(ev.x, ev.y);
 	}
 	else if(ev.y < top_end)
 	{
 		// Top bar click
-		handle_buttons(&top_buttons, ev.x, ev.y);
+		top_buttons.handle(ev.x, ev.y);
 	}
 	else
 	{
@@ -34,6 +35,7 @@ void MathKeyboard::on_mouse_down(input::SynMotionEvent &ev)
 				working_pos = i;
 				dirty = true;
 				draw_expression = true;
+				update_graph = true;
 				return;
 			}
 		}
@@ -42,55 +44,8 @@ void MathKeyboard::on_mouse_down(input::SynMotionEvent &ev)
 
 void MathKeyboard::render()
 {
-	if(draw_buttons)
-	{
-		for(Button& b : *active_buttons)
-		{
-			b.draw(fb);
-		}
-
-		draw_buttons = false;
-	}
-
-	if(draw_topbar)
-	{
-		fb->draw_rect(0, 0, 1404, top_end, WHITE, true);
-		for(Button& b : top_buttons)
-		{
-			b.draw(fb);
-		}
-		draw_topbar = false;
-	}
-
-	if(draw_clicked)
-	{
-		for(Button* b : clicked)
-		{
-			b->draw(fb, true);
-		}
-		clicked.clear();
-		draw_clicked = false;
-	}
-
-	if(draw_to_clear)
-	{
-		for(Button* b : to_clear)
-		{
-			b->draw(fb, false, true);
-		}
-		to_clear.clear();
-		draw_to_clear = false;
-	}
-
-	if(draw_cleared)
-	{
-		for(Button* b : cleared)
-		{
-			b->draw(fb);
-		}
-		cleared.clear();
-		draw_cleared = false;
-	}
+	top_buttons.draw(fb);
+	active_buttons->draw(fb);
 
 	if(draw_expression && working)
 	{
@@ -100,98 +55,78 @@ void MathKeyboard::render()
 	}
 }
 
-MathKeyboard::MathKeyboard(int x, int y, int w, int h) : Widget(x, y, w, h)
+MathKeyboard::MathKeyboard(int x, int y, int w, int h) : Widget(x, y, w, h),
+	basic_buttons(&dirty), top_buttons(&dirty)
 {
+	basic_buttons.on_click += [this](Button& b){this->on_click(&b);};
+	top_buttons.on_click += [this](Button& b){this->on_click(&b);};
+
 	working_pos = -1;
 	active_buttons = &basic_buttons;
-	draw_cleared = false;
-	draw_to_clear = false;
-	draw_clicked = false;
 	draw_topbar = true;
+	is_done = false;
 
 	keyboard_start = 936 + 155;
 	top_end = 80;
 	int start = keyboard_start;
 
 
-	basic_buttons.emplace_back(156 * 0, start + 156 * 0, 156, 156, "+");
-	basic_buttons.emplace_back(156 * 1, start +  156 * 0, 156, 156, "-");
-	basic_buttons.emplace_back(156 * 2, start +  156 * 0, 156, 156, "^");
-	basic_buttons.emplace_back(156 * 3, start +  156 * 0, 156, 156, "(");
-	basic_buttons.emplace_back(156 * 4, start +  156 * 0, 156, 156, ")");
-	basic_buttons.emplace_back(156 * 5, start +  156 * 0, 156, 156, "a_");
-	basic_buttons.emplace_back(156 * 6, start +  156 * 0, 156, 156, "\xCF\x80"); // pi
-	basic_buttons.emplace_back(156 * 7, start +  156 * 0, 156, 156, "e");
-	basic_buttons.emplace_back(156 * 8, start +  156 * 0, 156, 156, "x");
+	basic_buttons.buttons.emplace_back(156 * 0, start + 156 * 0, 156, 156, "+");
+	basic_buttons.buttons.emplace_back(156 * 1, start +  156 * 0, 156, 156, "-");
+	basic_buttons.buttons.emplace_back(156 * 2, start +  156 * 0, 156, 156, "^");
+	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 0, 156, 156, "(");
+	basic_buttons.buttons.emplace_back(156 * 4, start +  156 * 0, 156, 156, ")");
+	basic_buttons.buttons.emplace_back(156 * 5, start +  156 * 0, 156, 156, "a_");
+	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 0, 156, 156, "\xCF\x80"); // pi
+	basic_buttons.buttons.emplace_back(156 * 7, start +  156 * 0, 156, 156, "e");
+	basic_buttons.buttons.emplace_back(156 * 8, start +  156 * 0, 156, 156, "x");
 
-	basic_buttons.emplace_back(156 * 0, start +  156 * 1, 156, 156, "*");
-	basic_buttons.emplace_back(156 * 1, start +  156 * 1, 156, 156, "/");
-	basic_buttons.emplace_back(156 * 2, start +  156 * 1, 156, 156, "a\xC2\xB2"); //a^2
-	basic_buttons.emplace_back(156 * 3, start +  156 * 1, 156, 156, "\xE2\x88\x9A"); // sqrt
-	basic_buttons.emplace_back(156 * 4, start +  156 * 1, 156, 156, "log");
-	basic_buttons.emplace_back(156 * 5, start +  156 * 1, 156, 156, "1");
-	basic_buttons.emplace_back(156 * 6, start +  156 * 1, 156, 156, "2");
-	basic_buttons.emplace_back(156 * 7, start +  156 * 1, 156, 156, "3");
-	basic_buttons.emplace_back(156 * 8, start +  156 * 1, 156, 156, "y");
+	basic_buttons.buttons.emplace_back(156 * 0, start +  156 * 1, 156, 156, "*");
+	basic_buttons.buttons.emplace_back(156 * 1, start +  156 * 1, 156, 156, "/");
+	basic_buttons.buttons.emplace_back(156 * 2, start +  156 * 1, 156, 156, "a\xC2\xB2"); //a^2
+	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 1, 156, 156, "\xE2\x88\x9A"); // sqrt
+	basic_buttons.buttons.emplace_back(156 * 4, start +  156 * 1, 156, 156, "log");
+	basic_buttons.buttons.emplace_back(156 * 5, start +  156 * 1, 156, 156, "1");
+	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 1, 156, 156, "2");
+	basic_buttons.buttons.emplace_back(156 * 7, start +  156 * 1, 156, 156, "3");
+	basic_buttons.buttons.emplace_back(156 * 8, start +  156 * 1, 156, 156, "y");
 
-	basic_buttons.emplace_back(156 * 0, start +  156 * 2, 156, 156, "sin");
-	basic_buttons.emplace_back(156 * 1, start +  156 * 2, 156, 156, "cos");
-	basic_buttons.emplace_back(156 * 2, start +  156 * 2, 156, 156, "tan");
-	basic_buttons.emplace_back(156 * 3, start +  156 * 2, 156, 156, ">");
-	basic_buttons.emplace_back(156 * 4, start +  156 * 2, 156, 156, "<");
-	basic_buttons.emplace_back(156 * 5, start +  156 * 2, 156, 156, "4");
-	basic_buttons.emplace_back(156 * 6, start +  156 * 2, 156, 156, "5");
-	basic_buttons.emplace_back(156 * 7, start +  156 * 2, 156, 156, "6");
-	basic_buttons.emplace_back(156 * 8, start +  156 * 2, 156, 156, "a");
+	basic_buttons.buttons.emplace_back(156 * 0, start +  156 * 2, 156, 156, "sin");
+	basic_buttons.buttons.emplace_back(156 * 1, start +  156 * 2, 156, 156, "cos");
+	basic_buttons.buttons.emplace_back(156 * 2, start +  156 * 2, 156, 156, "tan");
+	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 2, 156, 156, ">");
+	basic_buttons.buttons.emplace_back(156 * 4, start +  156 * 2, 156, 156, "<");
+	basic_buttons.buttons.emplace_back(156 * 5, start +  156 * 2, 156, 156, "4");
+	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 2, 156, 156, "5");
+	basic_buttons.buttons.emplace_back(156 * 7, start +  156 * 2, 156, 156, "6");
+	basic_buttons.buttons.emplace_back(156 * 8, start +  156 * 2, 156, 156, "a");
 
-	basic_buttons.emplace_back(156 * 0, start +  156 * 3, 156, 156, "sinh");
-	basic_buttons.emplace_back(156 * 1, start +  156 * 3, 156, 156, "cosh");
-	basic_buttons.emplace_back(156 * 2, start +  156 * 3, 156, 156, "tanh");
-	basic_buttons.emplace_back(156 * 3, start +  156 * 3, 156, 156, "\xE2\x89\xA5"); // >=
-	basic_buttons.emplace_back(156 * 4, start +  156 * 3, 156, 156, "\xE2\x89\xA4"); // <=
-	basic_buttons.emplace_back(156 * 5, start +  156 * 3, 156, 156, "7");
-	basic_buttons.emplace_back(156 * 6, start +  156 * 3, 156, 156, "8");
-	basic_buttons.emplace_back(156 * 7, start +  156 * 3, 156, 156, "9");
-	basic_buttons.emplace_back(156 * 8, start +  156 * 3, 156, 156, "b");
+	basic_buttons.buttons.emplace_back(156 * 0, start +  156 * 3, 156, 156, "sinh");
+	basic_buttons.buttons.emplace_back(156 * 1, start +  156 * 3, 156, 156, "cosh");
+	basic_buttons.buttons.emplace_back(156 * 2, start +  156 * 3, 156, 156, "tanh");
+	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 3, 156, 156, "\xE2\x89\xA5"); // >=
+	basic_buttons.buttons.emplace_back(156 * 4, start +  156 * 3, 156, 156, "\xE2\x89\xA4"); // <=
+	basic_buttons.buttons.emplace_back(156 * 5, start +  156 * 3, 156, 156, "7");
+	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 3, 156, 156, "8");
+	basic_buttons.buttons.emplace_back(156 * 7, start +  156 * 3, 156, 156, "9");
+	basic_buttons.buttons.emplace_back(156 * 8, start +  156 * 3, 156, 156, "b");
 
-	basic_buttons.emplace_back(156 * 0, start +  156 * 4, 156 * 2, 156, "Func");
-	basic_buttons.emplace_back(156 * 2, start +  156 * 4, 156, 156, "=");
-	basic_buttons.emplace_back(156 * 3, start +  156 * 4, 156, 156, "=P");
-	basic_buttons.emplace_back(156 * 4, start +  156 * 4, 156, 156, ",");
-	basic_buttons.emplace_back(156 * 5, start +  156 * 4, 156, 156, ".");
-	basic_buttons.emplace_back(156 * 6, start +  156 * 4, 156, 156, "0");
-	basic_buttons.emplace_back(156 * 7, start +  156 * 4, 156 * 2, 156, "Symb");
+	basic_buttons.buttons.emplace_back(156 * 0, start +  156 * 4, 156 * 2, 156, "Func");
+	basic_buttons.buttons.emplace_back(156 * 2, start +  156 * 4, 156, 156, "=");
+	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 4, 156, 156, "=P");
+	basic_buttons.buttons.emplace_back(156 * 4, start +  156 * 4, 156, 156, ",");
+	basic_buttons.buttons.emplace_back(156 * 5, start +  156 * 4, 156, 156, ".");
+	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 4, 156, 156, "0");
+	basic_buttons.buttons.emplace_back(156 * 7, start +  156 * 4, 156 * 2, 156, "Symb");
 
-	top_buttons.emplace_back(0, 0, 250, top_end, "Undo");
-	top_buttons.emplace_back(250, 0, 250, top_end, "Redo");
-	top_buttons.emplace_back(500, 0, 250, top_end, "Erase");
-	top_buttons.emplace_back(1404 - 250, 0, 250, top_end, "Done");
+	top_buttons.buttons.emplace_back(0, 0, 250, top_end, "Undo");
+	top_buttons.buttons.emplace_back(250, 0, 250, top_end, "Redo");
+	top_buttons.buttons.emplace_back(500, 0, 250, top_end, "Erase");
+	top_buttons.buttons.emplace_back(1404 - 250, 0, 250, top_end, "Done");
 
 	cur_screen = BASIC;
 	draw_buttons = true;
 	draw_expression = true;
-}
-
-void MathKeyboard::draw_basic_screen()
-{
-
-}
-
-void MathKeyboard::clear_clicked(Button *b)
-{
-	std::remove(clicked.begin(), clicked.end(), b);
-	to_clear.push_back(b);
-	ui::set_timeout([this, b](){this->redraw_cleared(b);}, 500);
-	dirty = true;
-	draw_to_clear = true;
-}
-
-void MathKeyboard::redraw_cleared(Button *b)
-{
-	std::remove(to_clear.begin(), to_clear.end(), b);
-	cleared.push_back(b);
-	dirty = true;
-	draw_cleared = true;
 }
 
 void MathKeyboard::on_mouse_up(input::SynMotionEvent &ev)
@@ -568,30 +503,11 @@ bool MathKeyboard::is_buildable_number(std::string str)
 	return true;
 }
 
-bool MathKeyboard::handle_buttons(std::vector<Button> *buttons, int cx, int cy)
-{
-	for (Button &b: *buttons)
-	{
-		if (cx >= b.x && cy >= b.y && b.x + b.w > cx && b.y + b.h > cy)
-		{
-			Button *bptr = &b;
-			clicked.push_back(bptr);
-			ui::set_timeout([this, bptr]()
-							{ this->clear_clicked(bptr); }, 1000);
-			on_click(bptr);
-			dirty = true;
-			draw_clicked = true;
-			return true;
-		}
-	}
-
-	return false;
-}
-
 bool MathKeyboard::handle_control_buttons(Button *b)
 {
 	if(b->as_char == "Done")
 	{
+		is_done = true;
 		return true;
 	}
 	else if(b->as_char == "Undo")
@@ -635,3 +551,4 @@ void Button::draw(framebuffer::FB* fb, bool clicked, bool cleared)
 	fb->draw_text(x + free_w * 0.5, y + free_h * 0.5, as_char, 64);
 
 }
+

@@ -115,17 +115,32 @@ Notebook::Notebook(int x, int y, int w, int h) : Widget(x, y, w, h), vfb(w, h)
 
 void Notebook::draw_bottom()
 {
-	for(DrawnLine& l : drawing)
+	// Draw old lines if needed
+	if(redraw_bottom)
 	{
-		fb->draw_line(l.x0, l.y0, l.x1, l.y1, 1, BLACK);
+		auto &drawn = bottom_pages[bottom_page].drawn;
+		for(const auto& stroke : drawn)
+		{
+			for(const DrawnLine& l : stroke.lines)
+			{
+				fb->draw_line(l.x0, l.y0, l.x1, l.y1, 1, BLACK);
+			}
+		}
 	}
 
-	// Insert the drawn lines to the last stroke (a new one will be created!)
-	auto& drawn = bottom_pages[bottom_page].drawn;
-	auto& lines = drawn[drawn.size() - 1].lines;
-	lines.insert(lines.end(), drawing.begin(), drawing.end());
-
-	drawing.clear();
+	if(!drawing.empty())
+	{
+		// Draw newly drawn lines
+		for(DrawnLine& l : drawing)
+		{
+			fb->draw_line(l.x0, l.y0, l.x1, l.y1, 1, BLACK);
+		}
+		// Insert the drawn lines to the last stroke (a new one will be created!)
+		auto &drawn = bottom_pages[bottom_page].drawn;
+		auto &lines = drawn[drawn.size() - 1].lines;
+		lines.insert(lines.end(), drawing.begin(), drawing.end());
+		drawing.clear();
+	}
 
 }
 
@@ -218,4 +233,13 @@ void Notebook::draw_cross(int color, int size, bool drag)
 		draw_axis(0, 1404, center.y, 0.0f, 0.0f, 1.0f,
 				  false, color, size, drag);
 	}
+}
+
+void Notebook::on_exit_kb()
+{
+	dirty = true;
+	bottom_dirty = true;
+	top_dirty = true;
+	in_draw = false;
+	redraw_bottom = true;
 }

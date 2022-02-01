@@ -5,9 +5,11 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "rmkit.h"
 
+// Hack to get rmkit to work with multiple .cpp files
 #include "widgets/Notebook.cpp"
 #include "math/MathExpression.cpp"
 #include "widgets/MathKeyboard.cpp"
+#include "widgets/Buttons.cpp"
 
 int main()
 {
@@ -16,20 +18,20 @@ int main()
 	fb->clear_screen();
 	fb->redraw_screen(true);
 
-	auto scene = ui::make_scene();
-	ui::MainLoop::set_scene(scene);
+	auto notebook_scene = ui::make_scene();
 
-	auto text = new ui::Text(0, 0, 200, 50, "Hello, good bad world!");
-	scene->add(text);
+	auto keyboard_scene = ui::make_scene();
 
-	//auto notebook = new Notebook(0, 0, 1404, 1872);
-	//scene->add(notebook);
+	auto notebook = new Notebook(0, 0, 1404, 1872);
+	notebook_scene->add(notebook);
 
 	MathExpression expr = MathExpression();
 	auto kb = new MathKeyboard(0, 0, 1404, 1872);
 	kb->working = &expr;
-	scene->add(kb);
+	keyboard_scene->add(kb);
 
+	ui::MainLoop::set_scene(notebook_scene);
+	ui::MainLoop::show_overlay(keyboard_scene);
 
 	ui::MainLoop::refresh();
 	ui::MainLoop::redraw();
@@ -40,11 +42,18 @@ int main()
 	while(!exit)
 	{
 		ui::MainLoop::main();
-		/*if(notebook->last_pen.x >= 1300 && notebook->last_pen.y <= 100)
+		if(kb->update_graph)
 		{
-			printf("EXPR!\n");
-			exit = true;
-		}*/
+			notebook->bottom_dirty = true;
+			notebook->dirty = true;
+			kb->update_graph = false;
+		}
+		else if(kb->is_done)
+		{
+			ui::MainLoop::hide_overlay();
+			kb->is_done = false;
+			notebook->on_exit_kb();
+		}
 		ui::MainLoop::redraw();
 		ui::MainLoop::read_input();
 	}
