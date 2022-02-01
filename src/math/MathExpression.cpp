@@ -161,7 +161,6 @@ void MathExpression::get_render(size_t pos, int& width, int& off, int& offx, std
 	}
 
 	width = count_utf8(text) * base_width;
-
 }
 
 
@@ -524,9 +523,17 @@ void MathExpression::find_div_num_denum_sizes(size_t pos, bool dimension_child, 
 	auto dimension = [this](int& target_size, int& target_height, int start, int end,
 							std::vector<std::pair<int, int>> pars, std::vector<size_t> divs)
 	{
+		// We must be careful with exponents as they change horizontal size
+		std::vector<int> ignore;
+		std::vector<int> exit_par;
+		std::vector<std::pair<int, int>> simple_exponents = find_simple_exponents(start, end, ignore, exit_par);
+
 		for(int i = start; i < end; i++)
 		{
+			bool in_ignore = std::find(ignore.begin(), ignore.end(), i) != ignore.end()
+					|| std::find(exit_par.begin(), exit_par.end(), i) != exit_par.end();
 			bool inside_pars = false;
+
 			// Make sure we are outside numerator divisions
 			for(std::pair<int, int> num_par : pars)
 			{
@@ -548,11 +555,24 @@ void MathExpression::find_div_num_denum_sizes(size_t pos, bool dimension_child, 
 					target_height = std::max(target_height, tokens[i].render_h);
 				}
 			}
-			else
+			else if(!in_ignore)
 			{
+				bool in_exponent = false;
+				for(size_t j = 0; j < simple_exponents.size(); j++)
+				{
+					if(simple_exponents[j].first < i && simple_exponents[j].second > i)
+					{
+						in_exponent = true;
+						break;
+					}
+				}
 				int width, off, offx;
 				std::string text;
 				get_render(i, width, off, offx, text, true);
+				if(in_exponent)
+				{
+					width *= 0.7;
+				}
 				target_size += width + off + offx;
 				target_height = std::max(target_height, 28);
 			}
@@ -575,68 +595,9 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 	std::unordered_map<size_t, std::pair<int, int>> div_to_pars;
 	// Simple exponents are those formed without any division in the exponent, which we can draw with ease,
 	// and we also make sure they don't contain any further exponents
-	std::vector<std::pair<int, int>> simple_exponents;
 	std::vector<int> ignore;
 	std::vector<int> exit_par;
-	// Find simple exponents
-	for(size_t i = start; i < end; i++)
-	{
-		if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == "^")
-		{
-			auto[left, right] = find_left_right_pair(i);
-			// Explore the exponent, see if it's a simple one
-			bool is_simple = true;
-			for(size_t j = i + 1; j < right; j++)
-			{
-				if(tokens[j].type == MathToken::OPERATOR && (tokens[j].value == "/" || tokens[j].value == "^"))
-				{
-					is_simple = false;
-					break;
-				}
-			}
-			if(!is_simple)
-			{
-				break;
-			}
-
-			simple_exponents.push_back(std::make_pair(i + 1, right));
-			ignore.push_back(i + 1);
-			ignore.push_back(right);
-			ignore.push_back(i);
-			// Now, see if we can remove parenthesis of the base, this is only done if it doesn't contain a fraction
-			// and it doesn't already have parens
-			bool ignore_left = true;
-			std::vector<std::pair<int, int>> div_parens;
-
-			for (size_t j = left; j < i; j++)
-			{
-				if (tokens[j].type == MathToken::OPERATOR && tokens[j].value == "/")
-				{
-					div_parens.push_back(find_left_right_pair(j));
-				}
-			}
-
-			// If there are already user parens, then we don't need to draw our parens
-			if(tokens[i - 2].type == MathToken::RPAREN)
-			{
-				for (size_t j = 0; j < div_parens.size(); j++)
-				{
-					if (div_parens[j].second == i - 2)
-					{
-						ignore_left = false;
-						break;
-					}
-				}
-			}
-
-			if(ignore_left)
-			{
-				ignore.push_back(left);
-				ignore.push_back(i - 1);
-			}
-			exit_par.push_back(right);
-		}
-	}
+	std::vector<std::pair<int, int>> simple_exponents = find_simple_exponents(start, end, ignore, exit_par);
 
 	for(size_t div : lowest_divs)
 	{
@@ -794,6 +755,73 @@ void MathExpression::draw_advanced_expr(int sx, int sy, int start, int end, fram
 
 	last_maxx = x;
 
+}
+
+std::vector<std::pair<int, int>>
+MathExpression::find_simple_exponents(int start, int end, vector<int>& ignore, vector<int>& exit_par)
+{
+	std::vector<std::pair<int, int>> simple_exponents;
+	// Find simple exponents
+	for(size_t i = start; i < end; i++)
+	{
+		if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == "^")
+		{
+			auto[left, right] = find_left_right_pair(i);
+			// Explore the exponent, see if it's a simple one
+			bool is_simple = true;
+			for(size_t j = i + 1; j < right; j++)
+			{
+				if(tokens[j].type == MathToken::OPERATOR && (tokens[j].value == "/" || tokens[j].value == "^"))
+				{
+					is_simple = false;
+					break;
+				}
+			}
+			if(!is_simple)
+			{
+				break;
+			}
+
+			simple_exponents.push_back(std::make_pair(i + 1, right));
+			ignore.push_back(i + 1);
+			ignore.push_back(right);
+			ignore.push_back(i);
+			// Now, see if we can remove parenthesis of the base, this is only done if it doesn't contain a fraction
+			// and it doesn't already have parens
+			bool ignore_left = true;
+			std::vector<std::pair<int, int>> div_parens;
+
+			for (size_t j = left; j < i; j++)
+			{
+				if (tokens[j].type == MathToken::OPERATOR && tokens[j].value == "/")
+				{
+					div_parens.push_back(find_left_right_pair(j));
+				}
+			}
+
+			// If there are already user parens, then we don't need to draw our parens
+			if(tokens[i - 2].type == MathToken::RPAREN)
+			{
+				for (size_t j = 0; j < div_parens.size(); j++)
+				{
+					if (div_parens[j].second == i - 2)
+					{
+						ignore_left = false;
+						break;
+					}
+				}
+			}
+
+			if(ignore_left)
+			{
+				ignore.push_back(left);
+				ignore.push_back(i - 1);
+			}
+			exit_par.push_back(right);
+		}
+	}
+
+	return simple_exponents;
 }
 
 

@@ -57,6 +57,9 @@ private:
 	void draw_div(int sx, int sy, size_t pos, framebuffer::FB* fb);
 	void draw_advanced_expr(int x, int y, int start, int end, framebuffer::FB* fb, bool in_pars);
 
+	std::vector<std::pair<int, int>>
+	find_simple_exponents(int start, int end, std::vector<int>& ignore,std::vector<int>& exit_par);
+
 public:
 	// If set, contains the error code
 	std::string error;
