@@ -12,7 +12,7 @@ void Buttons::draw(framebuffer::FB *fb)
 		draw_buttons = false;
 	}
 
-	if(draw_clicked)
+	if(draw_clicked && !stop_anim)
 	{
 		for(Button* b : clicked)
 		{
@@ -22,7 +22,7 @@ void Buttons::draw(framebuffer::FB *fb)
 		draw_clicked = false;
 	}
 
-	if(draw_to_clear)
+	if(draw_to_clear && !stop_anim)
 	{
 		for(Button* b : to_clear)
 		{
@@ -32,7 +32,7 @@ void Buttons::draw(framebuffer::FB *fb)
 		draw_to_clear = false;
 	}
 
-	if(draw_cleared)
+	if(draw_cleared && !stop_anim)
 	{
 		for(Button* b : cleared)
 		{
@@ -47,17 +47,24 @@ void Buttons::clear_clicked(Button *b)
 {
 	std::remove(clicked.begin(), clicked.end(), b);
 	to_clear.push_back(b);
-	ui::set_timeout([this, b](){this->redraw_cleared(b);}, 500);
-	*dirty_set = true;
-	draw_to_clear = true;
+	ui::set_timeout([this, b]()
+					{ this->redraw_cleared(b); }, 500);
+	if(!stop_anim)
+	{
+		*dirty_set = true;
+		draw_to_clear = true;
+	}
 }
 
 void Buttons::redraw_cleared(Button *b)
 {
 	std::remove(to_clear.begin(), to_clear.end(), b);
 	cleared.push_back(b);
-	*dirty_set = true;
-	draw_cleared = true;
+	if(!stop_anim)
+	{
+		*dirty_set = true;
+		draw_cleared = true;
+	}
 }
 
 Buttons::Buttons(int* dirty_set)
@@ -66,6 +73,7 @@ Buttons::Buttons(int* dirty_set)
 	draw_to_clear = false;
 	draw_clicked = false;
 	draw_buttons = true;
+	stop_anim = false;
 	this->dirty_set = dirty_set;
 
 }

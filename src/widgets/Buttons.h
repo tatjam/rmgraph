@@ -5,6 +5,7 @@ struct Button
 {
 	// if empty, we are a custom symbol
 	std::string as_char;
+	std::string id;
 	int x, y;
 	int w, h;
 
@@ -13,6 +14,13 @@ struct Button
 	Button(int x, int y, int w, int h, std::string as_char)
 	{
 		this->x = x; this->y = y; this->w = w; this->h = h; this->as_char = as_char;
+		this->id = as_char;
+	}
+
+	Button(int x, int y, int w, int h, std::string as_char, std::string id)
+	{
+		this->x = x; this->y = y; this->w = w; this->h = h; this->as_char = as_char;
+		this->id = id;
 	}
 };
 
@@ -40,6 +48,7 @@ public:
 	bool handle(int cx, int cy);
 
 	void draw(framebuffer::FB* fb);
+	bool stop_anim;
 
 	explicit Buttons(int* dirty_set);
 };

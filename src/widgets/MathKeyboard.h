@@ -17,10 +17,8 @@ private:
 
 	Screen cur_screen;
 
-	bool draw_buttons;
 	bool draw_screen;
 	bool draw_expression;
-	bool draw_topbar;
 
 	Buttons top_buttons;
 	Buttons basic_buttons;
@@ -31,10 +29,8 @@ private:
 
 	bool handle_control_buttons(Button* b);
 
-	int keyboard_start;
-	int top_end;
-
 public:
+	bool has_equals;
 	bool is_done;
 	bool update_graph;
 	MathExpression* working;
@@ -46,6 +42,8 @@ public:
 	void on_mouse_down(input::SynMotionEvent& ev) override;
 	void on_mouse_up(input::SynMotionEvent& ev) override;
 	void render() override;
+	void on_enter_kb();
+	void update_has_equals();
 
 	MathKeyboard(int x, int y, int w, int h);
 

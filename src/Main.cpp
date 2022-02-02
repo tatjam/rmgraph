@@ -19,19 +19,15 @@ int main()
 	fb->redraw_screen(true);
 
 	auto notebook_scene = ui::make_scene();
-
 	auto keyboard_scene = ui::make_scene();
 
 	auto notebook = new Notebook(0, 0, 1404, 1872);
 	notebook_scene->add(notebook);
 
-	MathExpression expr = MathExpression();
 	auto kb = new MathKeyboard(0, 0, 1404, 1872);
-	kb->working = &expr;
 	keyboard_scene->add(kb);
 
 	ui::MainLoop::set_scene(notebook_scene);
-	ui::MainLoop::show_overlay(keyboard_scene);
 
 	ui::MainLoop::refresh();
 	ui::MainLoop::redraw();
@@ -53,6 +49,12 @@ int main()
 			ui::MainLoop::hide_overlay();
 			kb->is_done = false;
 			notebook->on_exit_kb();
+		}
+		else if(notebook->to_edit && !ui::MainLoop::overlay_is_visible)
+		{
+			kb->working = notebook->to_edit;
+			kb->on_enter_kb();
+			ui::MainLoop::show_overlay(keyboard_scene);
 		}
 		ui::MainLoop::redraw();
 		ui::MainLoop::read_input();

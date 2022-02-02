@@ -47,7 +47,7 @@ std::optional<numer_t> MathExpression::evaluate(MathContext* in_context)
 			rpn_stack.pop();
 			numer_t v2 = rpn_stack.top();
 			rpn_stack.pop();
-			rpn_stack.push(front.operate(v1, v2));
+			rpn_stack.push(front.operate(v2, v1));
 		}
 		else if(front.type == MathToken::FUNCTION)
 		{
@@ -63,6 +63,8 @@ std::optional<numer_t> MathExpression::evaluate(MathContext* in_context)
 				values.push_back(rpn_stack.top());
 				rpn_stack.pop();
 			}
+			// Careful! It's RPN
+			std::reverse(values.begin(), values.end());
 			rpn_stack.push(front.function(values));
 		}
 		else
@@ -89,7 +91,7 @@ struct SimpleElement
 	int width;
 };
 
-void MathExpression::draw(int sx, int sy, framebuffer::FB* fb)
+void MathExpression::draw(int sx, int sy, framebuffer::FB* fb, bool is_editing)
 {
 	// We do very simplistic math rendering, just handling fractions, square roots, and exponentiations
 	// Remove all interactions first
@@ -98,16 +100,15 @@ void MathExpression::draw(int sx, int sy, framebuffer::FB* fb)
 		tok.render_x = 0; tok.render_y = 0; tok.render_w = 0; tok.render_h = 0;
 	}
 	auto rpn = get_rpn();
-	if(!rpn.has_value() || true)
+	if(!rpn.has_value())
 	{
 		// Simplistic rendering
-		draw_simple(sx, sy, fb);
-		draw_advanced(sx, sy + 400, fb);
+		draw_simple(sx, sy, fb, is_editing);
 		return;
 	}
 	else
 	{
-		draw_advanced(sx, sy, fb);
+		draw_advanced(sx, sy, fb, is_editing);
 		return;
 	}
 
@@ -164,11 +165,11 @@ void MathExpression::get_render(size_t pos, int& width, int& off, int& offx, std
 }
 
 
-void MathExpression::draw_simple(int sx, int sy, framebuffer::FB* fb)
+void MathExpression::draw_simple(int sx, int sy, framebuffer::FB* fb, bool is_editing)
 {
 	int x = sx;
 	int y = sy;
-	bool cleared = false;
+	bool cleared = !is_editing;
 	// We simply put every token in a line, old calculator style
 	for(size_t ti = 0 ; ti < tokens.size(); ti++)
 	{
@@ -249,12 +250,16 @@ std::vector<size_t> MathExpression::find_minimum_depth_operators(std::string op_
 
 }
 
-void MathExpression::dimension_div(size_t pos)
+void MathExpression::dimension_div(size_t pos, int* yoff)
 {
 	int nw, dw, nh, dh;
 	find_div_num_denum_sizes(pos, true, nw, dw, nh, dh);
+	if(yoff)
+	{
+		*yoff = nh;
+	}
 	tokens[pos].render_w = max(nw, dw) + DIV_EXTRA_SPACE * 2;
-	tokens[pos].render_h = nh + dh + 10;
+	tokens[pos].render_h = nh + dh + 25 + 25;
 	tokens[pos].old_height = tokens[pos].render_h;
 }
 
@@ -301,10 +306,13 @@ std::pair<int, int> MathExpression::find_left_right_pair(size_t pos)
 }
 
 
-void MathExpression::draw_advanced(int sx, int sy, framebuffer::FB *fb)
+void MathExpression::draw_advanced(int sx, int sy, framebuffer::FB *fb, bool is_editing)
 {
-	// TODO: Smart cleaning
-	fb->draw_rect(sx, sy - 150, 1404 - sx, 500, WHITE, true);
+	// TODO: Smarter cleaning to avoid too much drawing
+	if(is_editing)
+	{
+		fb->draw_rect(sx, Dimensions::top_end, 1404 - sx, Dimensions::keyboard_start - Dimensions::top_end, WHITE, true);
+	}
 
 	// Start at the top
 	auto lowest_divs = find_minimum_depth_operators("/", 0, tokens.size());
@@ -330,9 +338,9 @@ void MathExpression::draw_div(int sx, int sy, size_t pos, framebuffer::FB* fb)
 	auto[left, right] = find_left_right_pair(pos);
 	int top_free = div_width - nw;
 	int bottom_free = div_width - dw;
-	draw_advanced_expr(sx + top_free / 2, sy - nh - 10, left, pos, fb, true);
+	draw_advanced_expr(sx + top_free / 2, sy - max(nh, 28 * 2) / 2 - 20, left, pos, fb, true);
 	// The denominator we need to consider height
-	draw_advanced_expr(sx + bottom_free / 2, sy + dh + 10, pos + 1, right + 1, fb, true);
+	draw_advanced_expr(sx + bottom_free / 2, sy + dh / 2 + 25, pos + 1, right + 1, fb, true);
 
 }
 
@@ -519,65 +527,6 @@ void MathExpression::find_div_num_denum_sizes(size_t pos, bool dimension_child, 
 	// Heights are very easy
 	int num_height = 0;
 	int den_height = 0;
-
-	auto dimension = [this](int& target_size, int& target_height, int start, int end,
-							std::vector<std::pair<int, int>> pars, std::vector<size_t> divs)
-	{
-		// We must be careful with exponents as they change horizontal size
-		std::vector<int> ignore;
-		std::vector<int> exit_par;
-		std::vector<std::pair<int, int>> simple_exponents = find_simple_exponents(start, end, ignore, exit_par);
-
-		for(int i = start; i < end; i++)
-		{
-			bool in_ignore = std::find(ignore.begin(), ignore.end(), i) != ignore.end()
-					|| std::find(exit_par.begin(), exit_par.end(), i) != exit_par.end();
-			bool inside_pars = false;
-
-			// Make sure we are outside numerator divisions
-			for(std::pair<int, int> num_par : pars)
-			{
-				if(num_par.first <= i && num_par.second >= i)
-				{
-					inside_pars = true;
-					break;
-				}
-			}
-
-			if(inside_pars)
-			{
-				// If we find a division that's top level, we must consider it too!
-				if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == "/" &&
-				   std::find(divs.begin(), divs.end(), i) != divs.end())
-				{
-					// Get the division size that was computed previously
-					target_size += tokens[i].render_w;
-					target_height = std::max(target_height, tokens[i].render_h);
-				}
-			}
-			else if(!in_ignore)
-			{
-				bool in_exponent = false;
-				for(size_t j = 0; j < simple_exponents.size(); j++)
-				{
-					if(simple_exponents[j].first < i && simple_exponents[j].second > i)
-					{
-						in_exponent = true;
-						break;
-					}
-				}
-				int width, off, offx;
-				std::string text;
-				get_render(i, width, off, offx, text, true);
-				if(in_exponent)
-				{
-					width *= 0.7;
-				}
-				target_size += width + off + offx;
-				target_height = std::max(target_height, 28);
-			}
-		}
-	};
 
 	dimension(num_size, num_height, open_par_num + 1, pos - 1, num_divs_par, num_divs);
 	dimension(den_size, den_height, pos + 2, close_par_den, den_divs_par, den_divs);
@@ -827,6 +776,192 @@ MathExpression::find_simple_exponents(int start, int end, vector<int>& ignore, v
 	return simple_exponents;
 }
 
+std::pair<int, int> MathExpression::get_dimensions(int& y)
+{
+	int width, height;
+
+	std::vector<size_t> divs = find_minimum_depth_operators("/", 0, tokens.size());
+	std::vector<std::pair<int, int>> pars;
+	int yoff = 0;
+	int last_yoff = 0;
+	for(size_t div : divs)
+	{
+		last_yoff = yoff;
+		dimension_div(div, &yoff);
+		yoff = std::max(last_yoff, yoff);
+		pars.push_back(find_left_right_pair(div));
+	}
+
+	dimension(width, height, 0, tokens.size(),
+			  pars, divs);
+
+	y = -yoff;
+
+	return std::make_pair(width, height * 2);
+}
+
+void MathExpression::dimension(int &target_size, int &target_height, int start, int end,
+							   std::vector<std::pair<int, int>> pars, std::vector<size_t> divs)
+{
+	target_size = 0;
+	target_height = 0;
+	// We must be careful with exponents as they change horizontal size
+	std::vector<int> ignore;
+	std::vector<int> exit_par;
+	std::vector<std::pair<int, int>> simple_exponents = find_simple_exponents(start, end, ignore, exit_par);
+
+	for(int i = start; i < end; i++)
+	{
+		bool in_ignore = std::find(ignore.begin(), ignore.end(), i) != ignore.end()
+						 || std::find(exit_par.begin(), exit_par.end(), i) != exit_par.end();
+		bool inside_pars = false;
+
+		// Make sure we are outside numerator divisions
+		for(std::pair<int, int> num_par : pars)
+		{
+			if(num_par.first <= i && num_par.second >= i)
+			{
+				inside_pars = true;
+				break;
+			}
+		}
+
+		if(inside_pars)
+		{
+			// If we find a division that's top level, we must consider it too!
+			if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == "/" &&
+			   std::find(divs.begin(), divs.end(), i) != divs.end())
+			{
+				// Get the division size that was computed previously
+				target_size += tokens[i].render_w;
+				target_height = std::max(target_height, tokens[i].render_h);
+			}
+		}
+		else if(!in_ignore)
+		{
+			bool in_exponent = false;
+			for(size_t j = 0; j < simple_exponents.size(); j++)
+			{
+				if(simple_exponents[j].first < i && simple_exponents[j].second > i)
+				{
+					in_exponent = true;
+					break;
+				}
+			}
+			int width, off, offx;
+			std::string text;
+			get_render(i, width, off, offx, text, true);
+			if(in_exponent)
+			{
+				width *= 0.7;
+			}
+			target_size += width + off + offx;
+			target_height = std::max(target_height, 28);
+		}
+	}
+}
+
+std::pair<MathExpression, MathExpression> MathExpression::get_sides()
+{
+	MathExpression left;
+	MathExpression right;
+	bool in_lhs = true;
+	for(size_t i = 0; i < tokens.size(); i++)
+	{
+		if(tokens[i].type == MathToken::OPERATOR && tokens[i].value == "=")
+		{
+			if(!in_lhs)
+			{
+				fprintf(stderr, "Found two or more equal signs in expression, keyboard bugged out!\n");
+				exit(1);
+			}
+			// We found the equals
+			in_lhs = false;
+		}
+		else
+		{
+			if(in_lhs)
+			{
+				left.tokens.push_back(tokens[i]);
+			}
+			else
+			{
+				right.tokens.push_back(tokens[i]);
+			}
+		}
+	}
+
+	return std::make_pair(left, right);
+}
+
+bool MathExpression::is_explicit()
+{
+	auto sides = get_sides();
+	bool lhs_single = true, rhs_single = true;
+	auto first_xy = sides.first.depends_on_xy();
+	auto second_xy = sides.second.depends_on_xy();
+	bool is_y_of_x = (sides.first.is_x_or_y() && first_xy.second) && (second_xy.first && !second_xy.second);
+	bool is_x_of_y = (sides.first.is_x_or_y() && first_xy.first) && (second_xy.second && !second_xy.first);
+	bool is_of_x_y = (sides.second.is_x_or_y() && second_xy.second) && (first_xy.first && !first_xy.second);
+	bool is_of_y_x = (sides.second.is_x_or_y() && second_xy.first) && (first_xy.second && !second_xy.first);
+	return is_y_of_x || is_x_of_y || is_of_x_y || is_of_y_x;
+}
+
+bool MathExpression::is_x_or_y()
+{
+	return tokens.size() == 1 && tokens[0].type == MathToken::VARIABLE && (tokens[0].value == "x" || tokens[0].value == "y");
+}
+
+std::pair<bool, bool> MathExpression::depends_on_xy()
+{
+	bool found_x = false;
+	bool found_y = false;
+	for(MathToken& tok : tokens)
+	{
+		if(tok.type == MathToken::VARIABLE && tok.value == "x")
+		{
+			found_x = true;
+		}
+		else if(tok.type == MathToken::VARIABLE && tok.value == "y")
+		{
+			found_y = true;
+		}
+	}
+
+	return std::make_pair(found_x, found_y);
+}
+
+std::optional<numer_t> MathExpression::get_value_of_x(MathContext *in_context)
+{
+	// We assume we are explicit! Checked by notebook!
+	auto sides = get_sides();
+	if(sides.first.is_x_or_y() && sides.first.depends_on_xy().first)
+	{
+		return sides.second.evaluate(in_context);
+	}
+	else if(sides.second.is_x_or_y() && sides.second.depends_on_xy().first)
+	{
+		return sides.first.evaluate(in_context);
+	}
+
+	return {};
+}
+
+std::optional<numer_t> MathExpression::get_value_of_y(MathContext *in_context)
+{
+	// We assume we are explicit! Checked by notebook!
+	auto sides = get_sides();
+	if(sides.first.is_x_or_y() && sides.first.depends_on_xy().second)
+	{
+		return sides.second.evaluate(in_context);
+	}
+	else if(sides.second.is_x_or_y() && sides.second.depends_on_xy().second)
+	{
+		return sides.first.evaluate(in_context);
+	}
+
+	return {};
+}
 
 int MathToken::get_precedence()
 {
@@ -855,6 +990,10 @@ int MathToken::get_precedence()
 	else if(value == "^")
 	{
 		return 3;
+	}
+	else if(value == "=")
+	{
+		return INT_MAX;
 	}
 	else
 	{

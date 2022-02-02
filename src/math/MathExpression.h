@@ -51,7 +51,8 @@ private:
 	std::vector<size_t> find_minimum_depth_operators(std::string op_value, int lpar, int rpar);
 	// Finds leftwards right paren, and rightwards left paren (the others are obvious, pos + 1, pos - 1)
 	std::pair<int, int> find_left_right_pair(size_t pos);
-	void dimension_div(size_t pos);
+	// Optionally pass yoff to return how much we move upwards
+	void dimension_div(size_t pos, int* yoff = nullptr);
 	void find_div_num_denum_sizes(size_t pos, bool dimension_child, int& nw, int& dw, int& nh, int& dh);
 	// Recursive, draws all child divs
 	void draw_div(int sx, int sy, size_t pos, framebuffer::FB* fb);
@@ -72,11 +73,27 @@ public:
 	std::optional<numer_t> evaluate(MathContext* in_context);
 	std::optional<std::queue<MathToken>> get_rpn();
 
-	void draw(int sx, int sy, framebuffer::FB* fb);
-	void draw_simple(int sx, int sy, framebuffer::FB* fb);
-	void draw_advanced(int sx, int sy, framebuffer::FB* fb);
+	void draw(int sx, int sy, framebuffer::FB* fb, bool is_editing = true);
+	void draw_simple(int sx, int sy, framebuffer::FB* fb, bool is_editing);
+	void draw_advanced(int sx, int sy, framebuffer::FB* fb, bool is_editing);
+	// Adjusts y as equations may also grow upwards
+	std::pair<int, int> get_dimensions(int& y);
+	void dimension(int& target_size, int& target_height, int start, int end,
+				   std::vector<std::pair<int, int>> pars, std::vector<size_t> divs);
 	void draw_cursor(size_t working_pos, framebuffer::FB* fb);
 	void get_render(size_t pos, int& width, int& off, int& offx, std::string& text, bool simp_mult);
+
+	// We only allow = y or = x to be implicit, we don't check if it can be cleared for x / y
+	bool is_explicit();
+	// is the side just an x or just an y?
+	bool is_x_or_y();
+	// first value if dependency on x, second on y
+	std::pair<bool, bool> depends_on_xy();
+	// For explicit equations
+	std::optional<numer_t> get_value_of_x(MathContext* in_context);
+	std::optional<numer_t> get_value_of_y(MathContext* in_context);
+
+	std::pair<MathExpression, MathExpression> get_sides();
 };
 
 // A context associates variables with expressions

@@ -1,41 +1,94 @@
 #include "Notebook.h"
+#include "util/Dimensions.h"
 
 void Notebook::on_mouse_up(input::SynMotionEvent& ev)
 {
-	if(is_touch_event(ev))
+	was_down = false;
+
+	if(state == DRAWING)
 	{
+		if (!input::is_touch_event(ev))
+		{
+			cur_pen = OUTSIDE;
+			last_pen = OUTSIDE;
+			old_center.clear();
+			if (in_drag)
+			{
+				drag_finish = 0;
+				dirty = true;
+				top_dirty = true;
+			}
+			in_drag = false;
+			in_draw = false;
+		}
 	}
 	else
 	{
 		cur_pen = OUTSIDE;
 		last_pen = OUTSIDE;
-		old_center.clear();
-		if(in_drag)
-		{
-			drag_finish = 0;
-			dirty = true;
-			top_dirty = true;
-		}
 		in_drag = false;
 		in_draw = false;
+	}
+
+	if(state == DRAGGING)
+	{
+		// Finish the drag
+		state = DRAWING;
+		redraw_bottom = true;
+		bottom_dirty = true;
+		clear_last_rectangle = true;
+		last_expr_dirty = true;
+		prev_drag_pos.push_back(bottom_pages[bottom_page].exprs.back().second);
+		dirty = 1;
 	}
 
 }
 
 void Notebook::on_mouse_down(input::SynMotionEvent& ev)
 {
+	if (!was_down)
+	{
+		if (state == DRAWING)
+		{
+			top_bar.handle(ev.x, ev.y);
+		}
+		else if (state == CHOOSE_ADD)
+		{
+			choose_add.handle(ev.x, ev.y);
+		}
+		else if(state == ADDING)
+		{
+			bottom_dirty = true;
+			last_expr_dirty = false;
+			prev_drag_pos.push_back(bottom_pages[bottom_page].exprs.back().second);
+			bottom_pages[bottom_page].exprs.back().second = Vec2i(ev.x, ev.y);
+			dirty = 1;
+			state = DRAGGING;
+		}
+
+		was_down = true;
+	}
 
 }
 
 void Notebook::on_mouse_move(input::SynMotionEvent& ev)
 {
-	if(is_touch_event(ev))
+	if(state == DRAWING)
 	{
-		return;
+		if (is_touch_event(ev))
+		{
+			return;
+		}
+		cur_pen = Vec2(ev.x, ev.y);
+		on_pen_move();
+		last_pen = cur_pen;
 	}
-	cur_pen = Vec2(ev.x, ev.y);
-	on_pen_move();
-	last_pen = cur_pen;
+	else if(state == DRAGGING)
+	{
+		prev_drag_pos.push_back(bottom_pages[bottom_page].exprs.back().second);
+		bottom_pages[bottom_page].exprs.back().second = Vec2i(ev.x, ev.y);
+		dirty = 1;
+	}
 }
 
 void Notebook::on_mouse_hover(input::SynMotionEvent& ev)
@@ -45,61 +98,99 @@ void Notebook::on_mouse_hover(input::SynMotionEvent& ev)
 
 void Notebook::on_pen_move()
 {
-	if(last_pen != OUTSIDE)
+	if(state == DRAWING)
 	{
-		if (cur_pen.y < separator && last_pen.y < separator)
+		if (last_pen != OUTSIDE)
 		{
-			in_drag = true;
-			first_white_cross = true;
-			dirty = 1;
-			top_dirty = true;
-
-			Vec2i offset = cur_pen - last_pen;
-			if(old_center.size() == 0 || center != old_center.back())
+			if (cur_pen.y < separator && last_pen.y < separator &&
+				last_pen.y > Dimensions::top_end && cur_pen.y > Dimensions::top_end)
 			{
-				old_center.push_back(center);
-			}
-			center.x += offset.x;
-			center.y += offset.y;
-		}
-		else
-		{
-			if(!in_draw)
-			{
-				bottom_pages[bottom_page].drawn.push_back(DrawnStroke());
-				in_draw = true;
-			}
-			// Draw a line
-			DrawnLine line;
-			line.x0 = last_pen.x;
-			line.y0 = last_pen.y;
-			line.x1 = cur_pen.x;
-			line.y1 = cur_pen.y;
+				in_drag = true;
+				first_white_cross = true;
+				dirty = 1;
+				top_dirty = true;
 
-			drawing.push_back(line);
-			bottom_dirty = true;
-			dirty = 1;
+				Vec2i offset = cur_pen - last_pen;
+				if (old_center.size() == 0 || center != old_center.back())
+				{
+					old_center.push_back(center);
+				}
+				center.x += offset.x;
+				center.y += offset.y;
+			}
+			else
+			{
+				if (!in_draw)
+				{
+					bottom_pages[bottom_page].drawn.push_back(DrawnStroke());
+					in_draw = true;
+				}
+				// Draw a line
+				DrawnLine line;
+				line.x0 = last_pen.x;
+				line.y0 = last_pen.y;
+				line.x1 = cur_pen.x;
+				line.y1 = cur_pen.y;
+
+				drawing.push_back(line);
+				bottom_dirty = true;
+				dirty = 1;
+			}
 		}
 	}
 }
 
 void Notebook::render()
 {
+	top_bar.draw(fb);
+
 	if(bottom_dirty)
 	{
 		draw_bottom();
 		bottom_dirty = false;
 	}
 
+
 	if(top_dirty)
 	{
 		draw_graph();
 		top_dirty = false;
 	}
+
+	if(state == CHOOSE_ADD)
+	{
+		// Draw the choose add if needed
+		choose_add.draw(fb);
+
+	}
+	else if(state == ADDING)
+	{
+		fb->draw_text(30, separator - 64, "Click somewhere to add the equation and drag to adjust", 32);
+	}
+	else if(state == DRAGGING || clear_last_rectangle)
+	{
+		Vec2i cur_drag_pos = bottom_pages[bottom_page].exprs.back().second;
+		// Draw a rectangle the size of the equation, and clear the previous one
+		fb->waveform_mode = WAVEFORM_MODE_A2;
+		for(Vec2i pos : prev_drag_pos)
+		{
+			fb->draw_rect(pos.x, pos.y + yoff, expr_size.x, expr_size.y, WHITE, false);
+		}
+		prev_drag_pos.clear();
+		if(!clear_last_rectangle)
+		{
+			fb->draw_rect(cur_drag_pos.x, cur_drag_pos.y + yoff, expr_size.x, expr_size.y, BLACK, false);
+		}
+		clear_last_rectangle = false;
+	}
 }
 
-Notebook::Notebook(int x, int y, int w, int h) : Widget(x, y, w, h), vfb(w, h)
+Notebook::Notebook(int x, int y, int w, int h) : Widget(x, y, w, h), vfb(w, h),
+	top_bar(&dirty), choose_add(&dirty)
 {
+	was_down = false;
+	eraser = false;
+
 	Page page;
 	bottom_pages.push_back(page);
 
@@ -111,21 +202,49 @@ Notebook::Notebook(int x, int y, int w, int h) : Widget(x, y, w, h), vfb(w, h)
 	top_dirty = true;
 	drag_finish = -1;
 	in_draw = false;
+	to_edit = nullptr;
+
+	int top_end = Dimensions::top_end;
+
+	top_bar.buttons.emplace_back(0, 0, 250, top_end, "File");
+	top_bar.buttons.emplace_back(250, 0, 250, top_end, "Undo");
+	top_bar.buttons.emplace_back(500, 0, 250, top_end, "Redo");
+	top_bar.buttons.emplace_back(1404 - 350, 0, 350, top_end, "Add");
+	top_bar.buttons.emplace_back(1404 - 600, 0, 250, top_end, "Eraser");
+
+	choose_add.buttons.emplace_back(1404 - 350, top_end * 1, 350, top_end, "Equation");
+	choose_add.buttons.emplace_back(1404 - 350, top_end * 2, 350, top_end, "Definition");
+	choose_add.buttons.emplace_back(1404 - 350, top_end * 3, 350, top_end, "Parameter");
+	choose_add.buttons.emplace_back(1404 - 350, top_end * 4, 350, top_end, "Point");
+	choose_add.buttons.emplace_back(1404 - 350, top_end * 5, 350, top_end, "Cancel");
+
+	top_bar.on_click += [this](Button& b){this->on_click(&b);};
+	choose_add.on_click += [this](Button& b){this->on_click(&b);};
 }
 
 void Notebook::draw_bottom()
 {
-	// Draw old lines if needed
+	// Draw old lines and all equations if needed
 	if(redraw_bottom)
 	{
-		auto &drawn = bottom_pages[bottom_page].drawn;
+		auto& drawn = bottom_pages[bottom_page].drawn;
 		for(const auto& stroke : drawn)
 		{
 			for(const DrawnLine& l : stroke.lines)
 			{
-				fb->draw_line(l.x0, l.y0, l.x1, l.y1, 1, BLACK);
+				fb->draw_line(l.x0, l.y0, l.x1, l.y1, 3, BLACK);
 			}
 		}
+
+		auto& exprs = bottom_pages[bottom_page].exprs;
+		for(auto& expr : exprs)
+		{
+			if(expr.second.x >= 0)
+			{
+				expr.first.draw(expr.second.x, expr.second.y, fb, false);
+			}
+		}
+		redraw_bottom = false;
 	}
 
 	if(!drawing.empty())
@@ -133,7 +252,7 @@ void Notebook::draw_bottom()
 		// Draw newly drawn lines
 		for(DrawnLine& l : drawing)
 		{
-			fb->draw_line(l.x0, l.y0, l.x1, l.y1, 1, BLACK);
+			fb->draw_line(l.x0, l.y0, l.x1, l.y1, 3, BLACK);
 		}
 		// Insert the drawn lines to the last stroke (a new one will be created!)
 		auto &drawn = bottom_pages[bottom_page].drawn;
@@ -142,19 +261,27 @@ void Notebook::draw_bottom()
 		drawing.clear();
 	}
 
+	if(last_expr_dirty)
+	{
+		auto expr = bottom_pages[bottom_page].exprs.back();
+		expr.first.draw(expr.second.x, expr.second.y, fb, false);
+		last_expr_dirty = false;
+	}
+
 }
 
 
 
 void Notebook::draw_graph()
 {
-	if(drag_finish == 0)
+	if(drag_finish == 0 || refresh_top)
 	{
 		// Flash black and white
 		fb->draw_rect(0, 80, 1404, separator, BLACK, true);
 		this_thread::sleep_for(1.5s);
 		fb->draw_rect(0, 80, 1404, separator, WHITE, true);
 		drag_finish = -1;
+		refresh_top = false;
 	}
 
 	if(in_drag)
@@ -174,22 +301,23 @@ void Notebook::draw_graph()
 	else
 	{
 		draw_cross(BLACK, 2, false);
-
-		bool first = true;
-		Vec2i prev;
-		// Draw the function
-		float left = (-1404.0f * 0.5f + center.x) / zoom.x;
-		float right = (1404.0f * 0.5f + center.x) / zoom.x;
-		for(float x = left; x < right; x+=0.05f)
+		// Draw implicit functions of x
+		for(auto& pair : bottom_pages[bottom_page].exprs)
 		{
-			float y = sin(x * 1.0f) + cos(x * 2.0f);
-			Vec2i point = transform_point(Vec2f(x, -y));
-			if(in_bounds(point) && in_bounds(prev) && !first)
+			MathContext ctx;
+			MathExpression& expr = pair.first;
+			// Try all possibilities
+			bool was_explicit = false;
+			was_explicit |= plot_f_of_x(&ctx, expr);
+			if(!was_explicit)
 			{
-				fb->draw_line(point.x, point.y, prev.x, prev.y, 1, BLACK);
+				was_explicit |= plot_f_of_y(&ctx, expr);
 			}
-			prev = point;
-			first = false;
+			// Draw implicit equation using marching squares
+			if(!was_explicit)
+			{
+
+			}
 		}
 	}
 
@@ -237,9 +365,124 @@ void Notebook::draw_cross(int color, int size, bool drag)
 
 void Notebook::on_exit_kb()
 {
+	choose_add.stop_anim = false;
+	top_bar.stop_anim = false;
+
+	if(to_edit->tokens.size() != 0)
+	{
+		state = ADDING;
+		auto[w, h] = to_edit->get_dimensions(yoff);
+		expr_size.x = w; expr_size.y = h;
+	}
+	else
+	{
+		state = DRAWING;
+	}
+	to_edit = nullptr;
 	dirty = true;
 	bottom_dirty = true;
 	top_dirty = true;
+	refresh_top = true;
 	in_draw = false;
 	redraw_bottom = true;
+	to_edit = nullptr;
+	top_bar.draw_buttons = true;
+}
+
+void Notebook::on_click(Button* b)
+{
+	if(state == DRAWING)
+	{
+		if (b->id == "Add")
+		{
+			state = CHOOSE_ADD;
+			choose_add.draw_buttons = true;
+			dirty = 1;
+		}
+	}
+	if(state == CHOOSE_ADD)
+	{
+		if(b->id == "Equation")
+		{
+			on_enter_kb();
+			bottom_pages[bottom_page].exprs.emplace_back(MathExpression(), Vec2i(-1, -1));
+			to_edit = &bottom_pages[bottom_page].exprs.back().first;
+		}
+		else if (b->id == "Cancel")
+		{
+			state = DRAWING;
+			top_dirty = true;
+			refresh_top = true;
+			dirty = 1;
+		}
+	}
+}
+
+void Notebook::on_enter_kb()
+{
+	top_bar.stop_anim = true;
+	choose_add.stop_anim = true;
+}
+
+bool Notebook::plot_f_of_x(MathContext *ctx, MathExpression &expr)
+{
+	bool first = true;
+	Vec2i prev;
+	float left = (-1404.0f * 0.5f + center.x) / zoom.x;
+	float right = (1404.0f * 0.5f + center.x) / zoom.x;
+	ctx->free_values["x"] = 0.0f;
+
+	if(expr.is_explicit() && expr.get_value_of_y(ctx))
+	{
+		for (float x = left; x < right; x += 0.05f)
+		{
+			ctx->free_values["x"] = x;
+			float y = (float)expr.get_value_of_y(ctx).value();
+			Vec2i point = transform_point(Vec2f(x, -y));
+			if (in_bounds(point) && in_bounds(prev) && !first)
+			{
+				fb->draw_line(point.x, point.y, prev.x, prev.y, 1, BLACK);
+			}
+			prev = point;
+			first = false;
+		}
+
+		ctx->free_values.erase("x");
+		return true;
+	}
+
+	ctx->free_values.erase("x");
+	return false;
+
+}
+
+bool Notebook::plot_f_of_y(MathContext *ctx, MathExpression &expr)
+{
+	bool first = true;
+	Vec2i prev;
+	float top = (-separator * 0.5f + center.y + Dimensions::top_end) / zoom.y;
+	float bottom = (separator * 0.5f + center.y) / zoom.y;
+	ctx->free_values["y"] = 0.0f;
+
+	if(expr.is_explicit() && expr.get_value_of_x(ctx))
+	{
+		for (float y = top; y < bottom; y += 0.05f)
+		{
+			ctx->free_values["y"] = y;
+			float x = (float)expr.get_value_of_x(ctx).value();
+			Vec2i point = transform_point(Vec2f(x, -y));
+			if (in_bounds(point) && in_bounds(prev) && !first)
+			{
+				fb->draw_line(point.x, point.y, prev.x, prev.y, 1, BLACK);
+			}
+			prev = point;
+			first = false;
+		}
+
+		ctx->free_values.erase("y");
+		return true;
+	}
+
+	ctx->free_values.erase("y");
+	return false;
 }

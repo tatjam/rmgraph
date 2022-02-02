@@ -1,5 +1,6 @@
 #include "MathKeyboard.h"
 #include "Buttons.h"
+#include "util/Dimensions.h"
 
 
 void MathKeyboard::on_mouse_down(input::SynMotionEvent &ev)
@@ -9,11 +10,11 @@ void MathKeyboard::on_mouse_down(input::SynMotionEvent &ev)
 		return;
 	}
 	was_down = true;
-	if(ev.y > keyboard_start)
+	if(ev.y > Dimensions::keyboard_start)
 	{
 		active_buttons->handle(ev.x, ev.y);
 	}
-	else if(ev.y < top_end)
+	else if(ev.y < Dimensions::top_end)
 	{
 		// Top bar click
 		top_buttons.handle(ev.x, ev.y);
@@ -49,7 +50,7 @@ void MathKeyboard::render()
 
 	if(draw_expression && working)
 	{
-		working->draw(40, 300, fb);
+		working->draw(40, 500, fb);
 		working->draw_cursor(working_pos, fb);
 		draw_expression = false;
 	}
@@ -63,12 +64,10 @@ MathKeyboard::MathKeyboard(int x, int y, int w, int h) : Widget(x, y, w, h),
 
 	working_pos = -1;
 	active_buttons = &basic_buttons;
-	draw_topbar = true;
 	is_done = false;
 
-	keyboard_start = 936 + 155;
-	top_end = 80;
-	int start = keyboard_start;
+	int start = Dimensions::keyboard_start;
+	int top_end = Dimensions::top_end;
 
 
 	basic_buttons.buttons.emplace_back(156 * 0, start + 156 * 0, 156, 156, "+");
@@ -77,14 +76,14 @@ MathKeyboard::MathKeyboard(int x, int y, int w, int h) : Widget(x, y, w, h),
 	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 0, 156, 156, "(");
 	basic_buttons.buttons.emplace_back(156 * 4, start +  156 * 0, 156, 156, ")");
 	basic_buttons.buttons.emplace_back(156 * 5, start +  156 * 0, 156, 156, "a_");
-	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 0, 156, 156, "\xCF\x80"); // pi
+	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 0, 156, 156, "\xCF\x80", "pi");
 	basic_buttons.buttons.emplace_back(156 * 7, start +  156 * 0, 156, 156, "e");
 	basic_buttons.buttons.emplace_back(156 * 8, start +  156 * 0, 156, 156, "x");
 
 	basic_buttons.buttons.emplace_back(156 * 0, start +  156 * 1, 156, 156, "*");
 	basic_buttons.buttons.emplace_back(156 * 1, start +  156 * 1, 156, 156, "/");
-	basic_buttons.buttons.emplace_back(156 * 2, start +  156 * 1, 156, 156, "a\xC2\xB2"); //a^2
-	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 1, 156, 156, "\xE2\x88\x9A"); // sqrt
+	basic_buttons.buttons.emplace_back(156 * 2, start +  156 * 1, 156, 156, "a\xC2\xB2", "a^2");
+	basic_buttons.buttons.emplace_back(156 * 3, start +  156 * 1, 156, 156, "\xE2\x88\x9A", "sqrt");
 	basic_buttons.buttons.emplace_back(156 * 4, start +  156 * 1, 156, 156, "log");
 	basic_buttons.buttons.emplace_back(156 * 5, start +  156 * 1, 156, 156, "1");
 	basic_buttons.buttons.emplace_back(156 * 6, start +  156 * 1, 156, 156, "2");
@@ -125,7 +124,6 @@ MathKeyboard::MathKeyboard(int x, int y, int w, int h) : Widget(x, y, w, h),
 	top_buttons.buttons.emplace_back(1404 - 250, 0, 250, top_end, "Done");
 
 	cur_screen = BASIC;
-	draw_buttons = true;
 	draw_expression = true;
 }
 
@@ -204,44 +202,53 @@ void MathKeyboard::on_click(Button* b)
 
 	// WARNING: If you create a multi-token, don't use tok after pushing to tokl!
 	// (it will be revalidated after the if block)
-	if(b->as_char == "+" || b->as_char == "-" || b->as_char == "*")
+	if(b->id == "+" || b->id == "-" || b->id == "*")
 	{
 		// Simple operators, we insert them and a placeholder
 		tokl[0].type = MathToken::OPERATOR;
-		tokl[0].value = b->as_char;
+		tokl[0].value = b->id;
 		insert_placeholder = 1;
 		needs_prev_placeholder = true;
 	}
-	else if(b->as_char == "/" || b->as_char == "^")
+	else if(b->id == "=" && !has_equals)
 	{
 		tokl[0].type = MathToken::OPERATOR;
-		tokl[0].value = b->as_char;
+		tokl[0].value = "=",
+		insert_placeholder = true;
+		needs_prev_placeholder = true;
+		has_equals = true;
+	}
+	else if(b->id == "/" || b->id == "^")
+	{
+		tokl[0].type = MathToken::OPERATOR;
+		tokl[0].value = b->id;
 		insert_placeholder = 1;
 		insert_parens_around_placeholder = true;
 		insert_parens_around_prev = true;
-		if(b->as_char == "^")
+		if(b->id == "^")
 		{
 			parens_around_prev_include_mult = false;
 		}
 		needs_prev_placeholder = true;
 	}
 	// Single argument functions
-	else if(b->as_char == "sin")
+	else if(b->id == "sin" || b->id == "cos" || b->id == "tan" || b->id == "sinh" ||
+		b->id == "cosh" || b->id == "tanh" || b->id == "sqrt")
 	{
 		tokl[0].type = MathToken::FUNCTION;
-		tokl[0].value = b->as_char;
+		tokl[0].value = b->id;
 		insert_placeholder = 1;
 		insert_parens_around_placeholder = true;
 	}
 	// Two argument functions
-	else if(b->as_char == "max")
+	else if(b->id == "max")
 	{
 		tokl[0].type = MathToken::FUNCTION;
-		tokl[0].value = b->as_char;
+		tokl[0].value = b->id;
 		insert_placeholder = 2;
 		insert_parens_around_placeholder = true;
 	}
-	else if(b->as_char == "a\xC2\xB2")
+	else if(b->id == "a^2")
 	{
 		// Insert ^2 block
 		tokl[0].type = MathToken::OPERATOR;
@@ -257,19 +264,26 @@ void MathKeyboard::on_click(Button* b)
 		tokl.emplace_back();
 		tokl[3].type = MathToken::RPAREN;
 	}
-	else if(b->as_char == "(")
+	else if(b->id == "(")
 	{
 		tokl[0].type = MathToken::LPAREN;
 	}
-	else if(b->as_char == ")")
+	else if(b->id == ")")
 	{
 		tokl[0].type = MathToken::RPAREN;
 	}
-	else if(is_buildable_number(b->as_char))
+	else if(is_buildable_number(b->id))
 	{
 		tokl[0].type = MathToken::NUMBER;
-		tokl[0].value = b->as_char;
+		tokl[0].value = b->id;
 		build_number = true;
+	}
+	// Special numbers
+	else if(b->id == "pi")
+	{
+		tokl[0].type == MathToken::NUMBER;
+		// We use UTF-8 in the calculator
+		tokl[0].value = b->as_char;
 	}
 	else
 	{
@@ -434,7 +448,8 @@ void MathKeyboard::on_click(Button* b)
 				}
 				else if(tokens[ptr].type == MathToken::OPERATOR &&
 					(tokens[ptr].value == "+" || tokens[ptr].value == "-" ||
-					(tokens[ptr].value == "*" && !parens_around_prev_include_mult))
+					(tokens[ptr].value == "*" && !parens_around_prev_include_mult) ||
+					tokens[ptr].get_precedence() == INT_MAX)
 					&& paren_depth == 0 || paren_depth < 0)
 				{
 					finish = ptr;
@@ -524,6 +539,45 @@ bool MathKeyboard::handle_control_buttons(Button *b)
 	}
 
 	return false;
+}
+
+void MathKeyboard::on_enter_kb()
+{
+	dirty = 1;
+	draw_expression = true;
+	top_buttons.draw_buttons = true;
+	active_buttons->draw_buttons = true;
+	if(working)
+	{
+		if(working->tokens.empty())
+		{
+			working_pos = -1;
+		}
+		else
+		{
+			working_pos = working->tokens.size() - 1;
+		}
+	}
+	else
+	{
+		working_pos = -1;
+	}
+	update_has_equals();
+}
+
+void MathKeyboard::update_has_equals()
+{
+	has_equals = false;
+	if(working)
+	{
+		for (MathToken &tok: working->tokens)
+		{
+			if (tok.type == MathToken::OPERATOR && tok.value == "=")
+			{
+				has_equals = true;
+			}
+		}
+	}
 }
 
 
