@@ -316,7 +316,7 @@ void Notebook::draw_graph()
 			// Draw implicit equation using marching squares
 			if(!was_explicit)
 			{
-
+				plot_marching_squares(&ctx, expr, 2, 16, false);
 			}
 		}
 	}
@@ -485,4 +485,110 @@ bool Notebook::plot_f_of_y(MathContext *ctx, MathExpression &expr)
 
 	ctx->free_values.erase("y");
 	return false;
+}
+
+void Notebook::plot_marching_squares(MathContext *ctx, MathExpression &expr, int width, int resolution, bool fill)
+{
+	float left = (-1404.0f * 0.5f + center.x) / zoom.x;
+	float right = (1404.0f * 0.5f + center.x) / zoom.x;
+	float top = (-separator * 0.5f + center.y + Dimensions::top_end) / zoom.y;
+	float bottom = (separator * 0.5f + center.y) / zoom.y;
+
+	int x_cells = 1404 / resolution;
+	int y_cells = (separator - Dimensions::top_end) / resolution;
+	// Graphical steps
+	float xs = resolution;
+	float ys = resolution;
+	// Function steps
+	float xfs = ((right - left) * resolution) / 1404.0f;
+	float yfs = ((bottom - top) * resolution) / (float)(separator - Dimensions::top_end);
+	// x, y points to the top-left corners of the cells, graphical
+	float x = 0.0f, y = Dimensions::top_end;
+	// x, y points of the top-left corners of the cells, function
+	float xf = left, yf = top;
+	auto [lhs, rhs] = expr.get_sides();
+
+	for(int cx = 0; cx < x_cells; cx++)
+	{
+		for(int cy = 0; cy < y_cells; cy++)
+		{
+			// Evaluate all four corners
+			ctx->free_values["x"] = xf;
+			ctx->free_values["y"] = -yf;
+			float tl = lhs.evaluate(ctx).value() - rhs.evaluate(ctx).value();
+			ctx->free_values["x"] = xf + xfs;
+			float tr = lhs.evaluate(ctx).value() - rhs.evaluate(ctx).value();
+			ctx->free_values["y"] = -yf - yfs;
+			float br = lhs.evaluate(ctx).value() - rhs.evaluate(ctx).value();
+			ctx->free_values["x"] = xf;
+			float bl = lhs.evaluate(ctx).value() - rhs.evaluate(ctx).value();
+
+			int ms_case = 0;
+			if(bl >= 0.0f) ms_case += 1;
+			if(br >= 0.0f) ms_case += 2;
+			if(tr >= 0.0f) ms_case += 4;
+			if(tl >= 0.0f) ms_case += 8;
+#ifdef USE_SIMPLE_MSQUARES
+			// Simple algorithm, faster but ugly as hell
+			float top_progress = 0.5f;
+			float left_progress = 0.5f;
+			float bottom_progress = 0.5f;
+			float right_progress = 0.5f;
+#else
+			// Algorithm with linear interpolation
+			// Progress from left to right in the top
+			auto get_interp = [](float val1, float val2)
+			{
+				// We image the line that joins x = 0, y = val1 and x = 1, y = val2
+				// and find the intersection with y = 0 (that's prg)
+				// 0 = m*prg + c => prg = -c / m
+				float m = val2 - val1;
+				float c = val1;
+				float prg = -c / m;
+				// Bounds!
+				prg = max(prg, 0.0f);
+				prg = min(prg, 1.0f);
+				return prg;
+			};
+
+			float top_progress = get_interp(tl, tr);
+			float left_progress = get_interp(tl, bl);
+			float bottom_progress = get_interp(bl, br);
+			float right_progress = get_interp(tr, br);
+#endif
+
+			if(ms_case == 1 || ms_case == 14)
+				fb->draw_line(x, y + ys * left_progress, x + xs * bottom_progress, y + ys, width, BLACK);
+			else if(ms_case == 2 || ms_case == 13)
+				fb->draw_line(x + xs * bottom_progress, y + ys, x + xs, y + ys * right_progress, width, BLACK);
+			else if(ms_case == 3 || ms_case == 12)
+				fb->draw_line(x, y + ys * left_progress, x + xs, y + ys * right_progress, width, BLACK);
+			else if(ms_case == 4 || ms_case == 11)
+				fb->draw_line(x + xs * top_progress, y, x + xs, y + ys * right_progress, width, BLACK);
+			else if(ms_case == 5)
+			{
+				fb->draw_line(x + xs * bottom_progress, y + ys, x + xs, y + ys * right_progress, width, BLACK);
+				fb->draw_line(x, y + ys * left_progress, x + xs * top_progress, y, width, BLACK);
+			}
+			else if(ms_case == 6 || ms_case == 9)
+				fb->draw_line(x + xs * top_progress, y, x + xs * bottom_progress, y + ys, width, BLACK);
+			else if(ms_case == 7 || ms_case == 8)
+				fb->draw_line(x, y + ys * left_progress, x + xs * top_progress, y, width, BLACK);
+			else if(ms_case == 10)
+			{
+				fb->draw_line(x + xs * top_progress, y, x + xs, y + ys * right_progress, width, BLACK);
+				fb->draw_line(x, y + ys * left_progress, x + xs * bottom_progress, y + ys, width, BLACK);
+			}
+
+
+			y += ys;
+			yf += yfs;
+		}
+		y = Dimensions::top_end;
+		yf = top;
+		x += xs;
+		xf += xfs;
+	}
+
+
 }

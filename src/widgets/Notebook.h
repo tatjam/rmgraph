@@ -79,6 +79,8 @@ private:
 
 	bool plot_f_of_x(MathContext* ctx, MathExpression& expr);
 	bool plot_f_of_y(MathContext* ctx, MathExpression& expr);
+	// Resolution specifies the size of the cells in pixels
+	void plot_marching_squares(MathContext* ctx, MathExpression& expr, int width, int resolution, bool fill);
 
 public:
 	bool eraser;
