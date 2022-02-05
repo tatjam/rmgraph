@@ -10,6 +10,7 @@
 #include "math/MathExpression.cpp"
 #include "widgets/MathKeyboard.cpp"
 #include "widgets/Buttons.cpp"
+#include "widgets/Plot.cpp"
 
 int main()
 {

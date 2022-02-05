@@ -904,7 +904,15 @@ bool MathExpression::is_explicit()
 	bool is_x_of_y = (sides.first.is_x_or_y() && first_xy.first) && (second_xy.second && !second_xy.first);
 	bool is_of_x_y = (sides.second.is_x_or_y() && second_xy.second) && (first_xy.first && !first_xy.second);
 	bool is_of_y_x = (sides.second.is_x_or_y() && second_xy.first) && (first_xy.second && !second_xy.first);
-	return is_y_of_x || is_x_of_y || is_of_x_y || is_of_y_x;
+	if(sides.second.tokens.empty())
+	{
+		// An expression without equals sign can also be plotted on some cases
+		return (first_xy.first && !first_xy.second) || (first_xy.second && !first_xy.first);
+	}
+	else
+	{
+		return is_y_of_x || is_x_of_y || is_of_x_y || is_of_y_x;
+	}
 }
 
 bool MathExpression::is_x_or_y()
@@ -935,7 +943,11 @@ std::optional<numer_t> MathExpression::get_value_of_x(MathContext *in_context)
 {
 	// We assume we are explicit! Checked by notebook!
 	auto sides = get_sides();
-	if(sides.first.is_x_or_y() && sides.first.depends_on_xy().first)
+	if(sides.second.tokens.empty() && sides.first.depends_on_xy().second && is_explicit())
+	{
+		return sides.first.evaluate(in_context);
+	}
+	else if(sides.first.is_x_or_y() && sides.first.depends_on_xy().first)
 	{
 		return sides.second.evaluate(in_context);
 	}
@@ -951,7 +963,11 @@ std::optional<numer_t> MathExpression::get_value_of_y(MathContext *in_context)
 {
 	// We assume we are explicit! Checked by notebook!
 	auto sides = get_sides();
-	if(sides.first.is_x_or_y() && sides.first.depends_on_xy().second)
+	if(sides.second.tokens.empty() && sides.first.depends_on_xy().first && is_explicit())
+	{
+		return sides.first.evaluate(in_context);
+	}
+	else if(sides.first.is_x_or_y() && sides.first.depends_on_xy().second)
 	{
 		return sides.second.evaluate(in_context);
 	}
