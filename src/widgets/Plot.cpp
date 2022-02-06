@@ -61,10 +61,8 @@ bool Plot::plot_f_of_y(MathContext *ctx, MathExpression &expr, int res)
 
 void Plot::plot_marching_squares(MathContext *ctx, MathExpression &expr, int width, int resolution, bool fill)
 {
-	float left = (-1404.0f * 0.5f + center.x) / zoom.x;
-	float right = (1404.0f * 0.5f + center.x) / zoom.x;
-	float top = (-end_y * 0.5f + center.y + start_y) / zoom.y;
-	float bottom = (end_y * 0.5f + center.y + start_y) / zoom.y;
+	Vec2f tl = inverse_transform_point(Vec2i(start_x, start_y));
+	Vec2f br = inverse_transform_point(Vec2i(end_x, end_y));
 
 	int x_cells = 1404 / resolution;
 	int y_cells = (end_y - start_y) / resolution;
@@ -72,12 +70,12 @@ void Plot::plot_marching_squares(MathContext *ctx, MathExpression &expr, int wid
 	float xs = resolution;
 	float ys = resolution;
 	// Function steps
-	float xfs = ((right - left) * resolution) / 1404.0f;
-	float yfs = ((bottom - top) * resolution) / (float)(end_y - start_y);
+	float xfs = ((br.x - tl.x) * resolution) / 1404.0f;
+	float yfs = ((br.y - tl.y) * resolution) / (float)(end_y - start_y);
 	// x, y points to the top-left corners of the cells, graphical
 	float x = 0.0f, y = Dimensions::top_end;
 	// x, y points of the top-left corners of the cells, function
-	float xf = left, yf = top;
+	float xf = tl.x, yf = tl.y;
 	auto [lhs, rhs] = expr.get_sides();
 
 	for(int cx = 0; cx < x_cells; cx++)
@@ -157,7 +155,7 @@ void Plot::plot_marching_squares(MathContext *ctx, MathExpression &expr, int wid
 			yf += yfs;
 		}
 		y = Dimensions::top_end;
-		yf = top;
+		yf = tl.y;
 		x += xs;
 		xf += xfs;
 	}
@@ -261,7 +259,7 @@ void Plot::draw(int sx, int sy, int ex, int ey, framebuffer::FB* f, Page& page)
 			// Draw implicit equation using marching squares
 			if(!was_explicit)
 			{
-				plot_marching_squares(&ctx, expr, 2, 16, false);
+				plot_marching_squares(&ctx, expr, 2, 12, false);
 			}
 		}
 	}
