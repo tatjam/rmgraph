@@ -14,11 +14,9 @@ bool Plot::plot_f_of_x(MathContext *ctx, MathExpression &expr, int res)
 			ctx->free_values["x"] = xf;
 			float y = (float)expr.get_value_of_y(ctx).value();
 			Vec2i point = transform_point(Vec2f(xf, -y));
-			printf("%i, %i\n", point.x, point.y);
 			if(in_bounds(point) && in_bounds(prev) && !first)
 			{
 				fb->draw_line(point.x, point.y, prev.x, prev.y, 1, BLACK);
-				printf("IN_BOUNDS\n");
 			}
 			prev = point;
 			first = false;

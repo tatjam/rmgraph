@@ -18,6 +18,22 @@ struct DrawnStroke
 	std::vector<DrawnLine> lines;
 };
 
+class Notebook;
+
+// Used for the quadtree, storing strokes is enough as they are usually short
+struct StrokePointer
+{
+public:
+
+	Notebook* in_notebook;
+	size_t in_page;
+	size_t stroke_index;
+	static quadtree::Box<int> get_box(const StrokePointer& a);
+	static bool equals(const StrokePointer& a, const StrokePointer& b);
+
+	StrokePointer(Notebook* nb, size_t pag, size_t idx) : in_notebook(nb), in_page(pag), stroke_index(idx) {}
+};
+
 // A Page contains user drawn stuff and equations (math objects)
 // The MathObjects are not neccesarily in the same page as their display
 struct Page
@@ -26,7 +42,12 @@ struct Page
 	std::vector<std::pair<MathExpression, Vec2i>> exprs;
 	// Plot may be resized in each page
 	int plot_x, plot_y, plot_ex, plot_ey;
+	static constexpr quadtree::Box<int> page_box = quadtree::Box<int>(0, 0, 1404, 1872);
+	using QuadTree = quadtree::Quadtree<StrokePointer, decltype(StrokePointer::get_box)*, decltype(StrokePointer::equals)*, int>;
+	QuadTree quadtree = QuadTree(page_box, &StrokePointer::get_box, &StrokePointer::equals);
 
+	// Sanifies all index of line pointers to avoid trouble
+	void remove_stroke(size_t ptr);
 	Page();
 };
 
@@ -79,7 +100,7 @@ public:
 
 	framebuffer::VirtualFB vfb;
 
-	std::vector<Page> bottom_pages;
+	std::vector<Page*> bottom_pages;
 
 	Vec2i last_pen;
 

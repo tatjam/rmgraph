@@ -32,7 +32,7 @@ void Notebook::on_mouse_up(input::SynMotionEvent& ev)
 		bottom_dirty = true;
 		clear_last_rectangle = true;
 		last_expr_dirty = true;
-		prev_drag_pos.push_back(bottom_pages[bottom_page].exprs.back().second);
+		prev_drag_pos.push_back(bottom_pages[bottom_page]->exprs.back().second);
 		dirty = 1;
 	}
 
@@ -54,8 +54,8 @@ void Notebook::on_mouse_down(input::SynMotionEvent& ev)
 		{
 			bottom_dirty = true;
 			last_expr_dirty = false;
-			prev_drag_pos.push_back(bottom_pages[bottom_page].exprs.back().second);
-			bottom_pages[bottom_page].exprs.back().second = Vec2i(ev.x, ev.y);
+			prev_drag_pos.push_back(bottom_pages[bottom_page]->exprs.back().second);
+			bottom_pages[bottom_page]->exprs.back().second = Vec2i(ev.x, ev.y);
 			dirty = 1;
 			state = DRAGGING;
 		}
@@ -85,8 +85,8 @@ void Notebook::on_mouse_move(input::SynMotionEvent& ev)
 	}
 	else if(state == DRAGGING)
 	{
-		prev_drag_pos.push_back(bottom_pages[bottom_page].exprs.back().second);
-		bottom_pages[bottom_page].exprs.back().second = Vec2i(ev.x, ev.y);
+		prev_drag_pos.push_back(bottom_pages[bottom_page]->exprs.back().second);
+		bottom_pages[bottom_page]->exprs.back().second = Vec2i(ev.x, ev.y);
 		dirty = 1;
 	}
 }
@@ -102,9 +102,12 @@ void Notebook::on_pen_move(Vec2i cur_pen)
 	{
 		if (last_pen != OUTSIDE)
 		{
-			if (!in_draw)
+			if (!in_draw && !eraser)
 			{
-				bottom_pages[bottom_page].drawn.push_back(DrawnStroke());
+				bottom_pages[bottom_page]->drawn.push_back(DrawnStroke());
+				// Add it to the quadtree too
+				StrokePointer ptr(this, bottom_page, bottom_pages[bottom_page]->drawn.size() - 1);
+				bottom_pages[bottom_page]->quadtree.add(ptr);
 				in_draw = true;
 			}
 			// Draw a line
@@ -134,7 +137,7 @@ void Notebook::render()
 
 	if(top_dirty)
 	{
-		Page& p = bottom_pages[bottom_page];
+		Page& p = *bottom_pages[bottom_page];
 		plot.draw(p.plot_x, p.plot_y, p.plot_ex, p.plot_ey, fb, p);
 		top_dirty = false;
 	}
@@ -147,7 +150,7 @@ void Notebook::render()
 	}
 	else if(state == ADDING)
 	{
-		int separator = bottom_pages[bottom_page].plot_ey;
+		int separator = bottom_pages[bottom_page]->plot_ey;
 		if(separator < 100)
 		{
 			separator = 100;
@@ -156,7 +159,7 @@ void Notebook::render()
 	}
 	else if(state == DRAGGING || clear_last_rectangle)
 	{
-		Vec2i cur_drag_pos = bottom_pages[bottom_page].exprs.back().second;
+		Vec2i cur_drag_pos = bottom_pages[bottom_page]->exprs.back().second;
 		// Draw a rectangle the size of the equation, and clear the previous one
 		fb->waveform_mode = WAVEFORM_MODE_A2;
 		for(Vec2i pos : prev_drag_pos)
@@ -178,7 +181,7 @@ Notebook::Notebook(int x, int y, int w, int h) : Widget(x, y, w, h), vfb(w, h),
 	was_down = false;
 	eraser = false;
 
-	Page page;
+	Page* page = new Page();
 	bottom_pages.push_back(page);
 
 	last_pen = OUTSIDE;
@@ -204,12 +207,97 @@ Notebook::Notebook(int x, int y, int w, int h) : Widget(x, y, w, h), vfb(w, h),
 	choose_add.on_click += [this](Button& b){this->on_click(&b);};
 }
 
+constexpr int INSIDE = 0; // 0000
+constexpr int LEFT = 1;   // 0001
+constexpr int RIGHT = 2;  // 0010
+constexpr int BOTTOM = 4; // 0100
+constexpr int TOP = 8;    // 1000
+
+
+// Implementation of the Cohen-Sutherland algorithm, see
+// https://en.wikipedia.org/wiki/Cohen-Sutherland_algorithm
+static int compute_out_code(int x, int y, int xmin, int ymin, int xmax, int ymax)
+{
+	int code = INSIDE;
+	if(x < xmin)
+		code |= LEFT;
+	else if(x > xmax)
+		code |= RIGHT;
+	if(y < ymin)
+		code |= TOP;
+	else if(y > ymax)
+		code |= BOTTOM;
+
+	return code;
+}
+
+// Returns true if line was completely inside
+bool clip_line(DrawnLine& l, int min_x, int min_y, int max_x, int max_y)
+{
+	int code0 = compute_out_code(l.x0, l.y0, min_x, min_y, max_x, max_y);
+	int code1 = compute_out_code(l.x1, l.y1, min_x, min_y, max_x, max_y);
+
+	while(true)
+	{
+		if(!(code0 | code1))
+		{
+			// Both points are inside
+			return true;
+		}
+		else if(code0 & code1)
+		{
+			// Both points share an outside so both are outside
+			return false;
+		}
+		else
+		{
+			int x, y;
+
+			// Test againt each side and adjust
+			int codeout = code1 > code0 ? code1 : code0;
+			if(codeout & TOP)
+			{
+				x = l.x0 + (l.x1 - l.x0) * (max_y - l.y0) / (l.y1 - l.y0);
+				y = max_y;
+			}
+			else if(codeout & BOTTOM)
+			{
+				x = l.x0 + (l.x1 - l.x0) * (min_y - l.y0) / (l.y1 - l.y0);
+				y = min_y;
+			}
+			else if(codeout & RIGHT)
+			{
+				y = l.y0 + (l.y1 - l.y0) * (max_x - l.x0) / (l.x1 - l.x0);
+				x = max_x;
+			}
+			else if(codeout & LEFT)
+			{
+				y = l.y0 + (l.y1 - l.y0) * (min_x - l.x0) / (l.x1 - l.x0);
+				x = min_x;
+			}
+
+			if(codeout == code0)
+			{
+				l.x0 = x;
+				l.y0 = y;
+				code0 = compute_out_code(l.x0, l.y0, min_x, min_y, max_x, max_y);
+			}
+			else
+			{
+				l.x1 = x;
+				l.y1 = y;
+				code1 = compute_out_code(l.x1, l.y1, min_x, min_y, max_x, max_y);
+			}
+		}
+	}
+}
+
 void Notebook::draw_bottom()
 {
 	// Draw old lines and all equations if needed
 	if(redraw_bottom)
 	{
-		auto& drawn = bottom_pages[bottom_page].drawn;
+		auto& drawn = bottom_pages[bottom_page]->drawn;
 		for(const auto& stroke : drawn)
 		{
 			for(const DrawnLine& l : stroke.lines)
@@ -218,7 +306,7 @@ void Notebook::draw_bottom()
 			}
 		}
 
-		auto& exprs = bottom_pages[bottom_page].exprs;
+		auto& exprs = bottom_pages[bottom_page]->exprs;
 		for(auto& expr : exprs)
 		{
 			if(expr.second.x >= 0)
@@ -231,21 +319,59 @@ void Notebook::draw_bottom()
 
 	if(!drawing.empty())
 	{
-		// Draw newly drawn lines
-		for(DrawnLine& l : drawing)
+		if(eraser)
 		{
-			fb->draw_line(l.x0, l.y0, l.x1, l.y1, 3, BLACK);
+			constexpr int EWIDTH = 64;
+			// Draw white and try to remove vectors that we erased
+			for(DrawnLine& l : drawing)
+			{
+				fb->draw_rect(l.x0 - EWIDTH / 2, l.y0 - EWIDTH / 2, EWIDTH, EWIDTH, WHITE);
+				auto &drawn = bottom_pages[bottom_page]->drawn;
+				auto &quadtree = bottom_pages[bottom_page]->quadtree;
+				quadtree::Box<int> box(l.x0 - EWIDTH / 2, l.y0 - EWIDTH / 2,
+									   EWIDTH, EWIDTH);
+				// Use the quadtree to find which lines to adjust or erase
+				std::vector<StrokePointer> strokes = quadtree.query(box);
+				for(const auto& stroke_ptr : strokes)
+				{
+					DrawnStroke& stroke = bottom_pages[stroke_ptr.in_page]->drawn[stroke_ptr.stroke_index];
+					for(auto it = stroke.lines.begin(); it != stroke.lines.end();)
+					{
+						DrawnLine& line = *it;
+						bool erase = clip_line(line, l.x0 - EWIDTH / 2, l.y0 - EWIDTH / 2,
+											   l.x0 + EWIDTH / 2, l.y0 + EWIDTH / 2);
+						if(erase)
+						{
+							it = stroke.lines.erase(it);
+						}
+						else
+						{
+							it++;
+						}
+					}
+
+				}
+			}
+			drawing.clear();
 		}
-		// Insert the drawn lines to the last stroke (a new one will be created!)
-		auto &drawn = bottom_pages[bottom_page].drawn;
-		auto &lines = drawn[drawn.size() - 1].lines;
-		lines.insert(lines.end(), drawing.begin(), drawing.end());
-		drawing.clear();
+		else
+		{
+			// Draw newly drawn lines
+			for (DrawnLine &l: drawing)
+			{
+				fb->draw_line(l.x0, l.y0, l.x1, l.y1, 3, BLACK);
+			}
+			// Insert the drawn lines to the last stroke (a new one will be created!)
+			auto &drawn = bottom_pages[bottom_page]->drawn;
+			auto &lines = drawn[drawn.size() - 1].lines;
+			lines.insert(lines.end(), drawing.begin(), drawing.end());
+			drawing.clear();
+		}
 	}
 
 	if(last_expr_dirty)
 	{
-		auto expr = bottom_pages[bottom_page].exprs.back();
+		auto expr = bottom_pages[bottom_page]->exprs.back();
 		expr.first.draw(expr.second.x, expr.second.y, fb, false);
 		last_expr_dirty = false;
 	}
@@ -291,14 +417,27 @@ void Notebook::on_click(Button* b)
 			choose_add.draw_buttons = true;
 			dirty = 1;
 		}
+		else if(b->id == "Eraser")
+		{
+			eraser = true;
+			b->id = "Pen";
+			b->as_char = "Pen";
+			dirty = 1;
+		}
+		else if(b->id == "Pen")
+		{
+			eraser = false;
+			b->id = "Eraser";
+			b->as_char = "Eraser";
+		}
 	}
 	if(state == CHOOSE_ADD)
 	{
 		if(b->id == "Equation")
 		{
 			on_enter_kb();
-			bottom_pages[bottom_page].exprs.emplace_back(MathExpression(), Vec2i(-1, -1));
-			to_edit = &bottom_pages[bottom_page].exprs.back().first;
+			bottom_pages[bottom_page]->exprs.emplace_back(MathExpression(), Vec2i(-1, -1));
+			to_edit = &bottom_pages[bottom_page]->exprs.back().first;
 		}
 		else if (b->id == "Cancel")
 		{
@@ -323,4 +462,52 @@ Page::Page()
 	plot_ex = 1404;
 	plot_ey = 800;
 
+}
+
+void Page::remove_stroke(size_t ptr)
+{
+	StrokePointer* to_remove = nullptr;
+	for(StrokePointer& line : quadtree.query(page_box))
+	{
+		if(line.stroke_index == ptr)
+		{
+			to_remove = &line;
+		}
+		else if(line.stroke_index > ptr)
+		{
+			line.stroke_index--;
+		}
+	}
+
+	if(to_remove != nullptr)
+	{
+		quadtree.remove(*to_remove);
+	}
+}
+
+quadtree::Box<int> StrokePointer::get_box(const StrokePointer &a)
+{
+	quadtree::Box<int> out;
+	const Page& in_page = *a.in_notebook->bottom_pages[a.in_page];
+	const DrawnStroke& in_stroke = in_page.drawn[a.stroke_index];
+
+	int min_x = INT_MAX, min_y = INT_MAX, max_x = INT_MIN, max_y = INT_MIN;
+	for(const DrawnLine& l : in_stroke.lines)
+	{
+		min_x = min(l.x0, min_x); min_x = min(l.x1, min_x);
+		min_y = min(l.y0, min_y); min_y = min(l.y1, min_y);
+		max_x = max(l.x0, max_x); max_x = max(l.x1, max_x);
+		max_y = max(l.y0, max_y); max_y = max(l.y1, max_y);
+	}
+
+	out.top = min_y;
+	out.left = min_x;
+	out.width = max_x - min_x;
+	out.height = max_y - min_y;
+	return out;
+}
+
+bool StrokePointer::equals(const StrokePointer &a, const StrokePointer &b)
+{
+	return a.stroke_index == b.stroke_index && a.in_page == b.in_page;
 }
